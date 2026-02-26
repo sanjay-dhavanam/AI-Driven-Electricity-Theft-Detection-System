@@ -1,0 +1,550 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block title %}Enhanced Adaptive Learning - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-robot text-warning"></i>
+            Enhanced Adaptive Learning Control
+        </h2>
+        <button class="btn btn-success" onclick="refreshPage()">
+            <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="row">
+        <!-- Left Column: Retraining Control -->
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-play-circle"></i> Trigger Adaptive Retraining
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Job Name</label>
+                            <input type="text" class="form-control" id="jobName" 
+                                   value="Manual Retraining - {% now 'Y-m-d H:i' %}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Retraining Scope</label>
+                            <select class="form-select" id="scopeSelect">
+                                <option value="needing">Only meters needing retraining</option>
+                                <option value="selected">Selected meters only</option>
+                                <option value="all">All meters with models</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Meter Selection (shown when scope is 'selected') -->
+                    <div class="mb-4" id="meterSelectionSection" style="display: none;">
+                        <label class="form-label">Select Meters</label>
+                        <div class="border p-3" style="max-height: 200px; overflow-y: auto;">
+                            {% for meter in meters_with_models %}
+                            <div class="form-check">
+                                <input class="form-check-input meter-checkbox" type="checkbox" 
+                                       value="{{ meter.meter_id }}" id="meter_{{ meter.meter_id }}">
+                                <label class="form-check-label" for="meter_{{ meter.meter_id }}">
+                                    {{ meter.meter_id }}
+                                </label>
+                            </div>
+                            {% empty %}
+                            <div class="text-muted">No meters with models found</div>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" 
+                                    onclick="selectAllMeters()">Select All</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" 
+                                    onclick="deselectAllMeters()">Deselect All</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Parameters -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">Training Window</label>
+                            <select class="form-select" id="windowDays">
+                                <option value="30" selected>30 days</option>
+                                <option value="60">60 days</option>
+                                <option value="90">90 days</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Validation Days</label>
+                            <select class="form-select" id="validationDays">
+                                <option value="7" selected>7 days</option>
+                                <option value="14">14 days</option>
+                                <option value="30">30 days</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Improvement Threshold</label>
+                            <select class="form-select" id="improvementThreshold">
+                                <option value="2">2% improvement</option>
+                                <option value="5" selected>5% improvement</option>
+                                <option value="10">10% improvement</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Status and Preview -->
+                    <div class="alert alert-info mb-4">
+                        <h6><i class="fas fa-info-circle"></i> Retraining Logic:</h6>
+                        <ul class="mb-0">
+                            <li>Uses sliding window (last N days) for training</li>
+                            <li>Validates on last 7 days of window</li>
+                            <li>Compares F1-score with current model</li>
+                            <li>Replaces model <strong>only if improvement ≥ threshold</strong></li>
+                            <li>All decisions logged for audit</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <button type="button" class="btn btn-secondary me-2" onclick="showPreview()">
+                            <i class="fas fa-eye"></i> Preview
+                        </button>
+                        <button type="button" class="btn btn-warning" onclick="startRetraining()" 
+                                id="startButton">
+                            <i class="fas fa-play"></i> Start Retraining
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Progress Section -->
+            <div class="card mb-4" id="progressSection" style="display: none;">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-spinner fa-spin"></i> Retraining in Progress
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                             id="progressBar" style="width: 0%"></div>
+                    </div>
+                    <div class="mt-3" id="progressDetails">
+                        <p>Starting retraining job...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Meters Needing Retraining -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Meters Needing Retraining ({{ meters_needing|length }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Meter ID</th>
+                                    <th>Priority Score</th>
+                                    <th>Reasons</th>
+                                    <th>Days Since</th>
+                                    <th>Recent Issues</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for meter in meters_needing|slice:":10" %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'meter_detail' meter.meter_id %}">
+                                            {{ meter.meter_id }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if meter.score >= 5 %}bg-danger{% elif meter.score >= 3 %}bg-warning{% else %}bg-info{% endif %}">
+                                            {{ meter.score }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% for reason in meter.reasons %}
+                                        <span class="badge bg-secondary">{{ reason }}</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td>{{ meter.days_since_retraining }}</td>
+                                    <td>{{ meter.recent_anomalies }} anomalies</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-warning"
+                                                onclick="retrainSingleMeter('{{ meter.meter_id }}')">
+                                            <i class="fas fa-cog"></i> Retrain
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        <i class="fas fa-check-circle"></i>
+                                        All meters are up-to-date!
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Column: System Health & Logs -->
+        <div class="col-lg-4">
+            <!-- System Health -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-heartbeat"></i> System Health
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <small class="text-muted">Model Coverage</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-success" 
+                                 style="width: {{ system_health.coverage_percentage }}%">
+                                {{ system_health.coverage_percentage|floatformat:1 }}%
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            {{ system_health.meters_with_models }} of {{ system_health.total_meters }} meters
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">Average Model Age</small>
+                        <div class="progress" style="height: 20px;">
+                            {% with age=system_health.average_model_age_days %}
+                            {% if age > 365 %}
+                            <div class="progress-bar bg-info" style="width: 100%">
+                                {{ age|floatformat:0 }} days
+                            </div>
+                            {% else %}
+                            <div class="progress-bar bg-info" 
+                                 style="width: {% widthratio age 365 100 %}%">
+                                {{ age|floatformat:0 }} days
+                            </div>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">Retraining Success Rate</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar bg-warning" 
+                                 style="width: {{ system_health.success_rate|default:0 }}%">
+                                {{ system_health.success_rate|default:0|floatformat:1 }}%
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <table class="table table-sm">
+                            <tr>
+                                <td>Meters needing retraining:</td>
+                                <td class="text-end">{{ system_health.meters_needing_retraining|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Recent retraining jobs:</td>
+                                <td class="text-end">{{ system_health.recent_retrains|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Successful retrains:</td>
+                                <td class="text-end">{{ system_health.successful_retrains|default:0 }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Recent Retraining Logs -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history"></i> Recent Retraining Logs
+                    </h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% for log in recent_logs %}
+                    <div class="timeline-item mb-3">
+                        <div class="d-flex">
+                            <div class="flex-shrink-0">
+                                {% if log.status == 'completed' %}
+                                <span class="badge bg-success p-2">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                {% elif log.status == 'running' %}
+                                <span class="badge bg-warning p-2">
+                                    <i class="fas fa-spinner fa-spin"></i>
+                                </span>
+                                {% elif log.status == 'failed' %}
+                                <span class="badge bg-danger p-2">
+                                    <i class="fas fa-times"></i>
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary p-2">
+                                    <i class="fas fa-clock"></i>
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <div class="d-flex justify-content-between">
+                                    <strong>{{ log.name|truncatechars:20 }}</strong>
+                                    <small class="text-muted">
+                                        {% if log.duration_seconds %}
+                                        {% widthratio log.duration_seconds 60 1 as minutes %}
+                                        {{ minutes|floatformat:1 }}m
+                                        {% endif %}
+                                    </small>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>
+                                        <small>{{ log.total_meters }} meters</small>
+                                        <span class="badge bg-success ms-2">{{ log.success_count }}</span>
+                                        <span class="badge bg-warning">{{ log.improved_count }}</span>
+                                    </span>
+                                    <a href="{% url 'admin:core_retraininglog_change' log.id %}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-search"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        No retraining logs found.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Show/hide meter selection based on scope
+document.getElementById('scopeSelect').addEventListener('change', function() {
+    const section = document.getElementById('meterSelectionSection');
+    if (this.value === 'selected') {
+        section.style.display = 'block';
+    } else {
+        section.style.display = 'none';
+    }
+});
+
+function selectAllMeters() {
+    document.querySelectorAll('.meter-checkbox').forEach(checkbox => {
+        checkbox.checked = true;
+    });
+}
+
+function deselectAllMeters() {
+    document.querySelectorAll('.meter-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+}
+
+function showPreview() {
+    const scope = document.getElementById('scopeSelect').value;
+    let meterCount = 0;
+    
+    if (scope === 'selected') {
+        meterCount = document.querySelectorAll('.meter-checkbox:checked').length;
+        if (meterCount === 0) {
+            alert('Please select at least one meter');
+            return;
+        }
+    } else if (scope === 'all') {
+        meterCount = {{ meters_with_models|length|default:0 }};
+    } else { // needing
+        meterCount = {{ system_health.meters_needing_retraining|default:0 }};
+    }
+    
+    const windowDays = document.getElementById('windowDays').value;
+    const validationDays = document.getElementById('validationDays').value;
+    const improvement = document.getElementById('improvementThreshold').value;
+    
+    alert(`Preview:\n
+Scope: ${scope}\n
+Meters: ${meterCount}\n
+Training window: ${windowDays} days\n
+Validation: ${validationDays} days\n
+Improvement threshold: ${improvement}%\n
+\nModels will be replaced ONLY if F1-score improves by ${improvement}% or more.`);
+}
+
+let retrainingJobId = null;
+let progressInterval = null;
+
+function startRetraining() {
+    if (!confirm('Start adaptive retraining? This may take several minutes.')) {
+        return;
+    }
+    
+    // Get selected meter IDs
+    const scope = document.getElementById('scopeSelect').value;
+    const selectedMeters = [];
+    
+    if (scope === 'selected') {
+        document.querySelectorAll('.meter-checkbox:checked').forEach(checkbox => {
+            selectedMeters.push(checkbox.value);
+        });
+        if (selectedMeters.length === 0) {
+            alert('Please select at least one meter');
+            return;
+        }
+    }
+    
+    // Disable start button
+    document.getElementById('startButton').disabled = true;
+    
+    // Show progress section
+    document.getElementById('progressSection').style.display = 'block';
+    
+    // Prepare data
+    const data = {
+        scope: scope,
+        selected_meters: selectedMeters,
+        job_name: document.getElementById('jobName').value,
+        window_days: parseInt(document.getElementById('windowDays').value),
+        validation_days: parseInt(document.getElementById('validationDays').value),
+        improvement_threshold: parseInt(document.getElementById('improvementThreshold').value),
+    };
+    
+    // Start retraining
+    fetch('{% url "trigger_retraining" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            retrainingJobId = result.job_id;
+            document.getElementById('progressDetails').innerHTML = `
+                <p><strong>Job ID:</strong> ${result.job_id}</p>
+                <p><strong>Status:</strong> Started</p>
+                <p><strong>Meters:</strong> ${result.meter_count}</p>
+                <p><strong>Message:</strong> ${result.message}</p>
+            `;
+            
+            // Start polling for progress
+            progressInterval = setInterval(checkRetrainingProgress, 2000);
+        } else {
+            alert('Error: ' + result.error);
+            document.getElementById('progressSection').style.display = 'none';
+            document.getElementById('startButton').disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('Error starting retraining: ' + error.message);
+        document.getElementById('progressSection').style.display = 'none';
+        document.getElementById('startButton').disabled = false;
+    });
+}
+
+function checkRetrainingProgress() {
+    if (!retrainingJobId) return;
+    
+    fetch(`{% url "retraining_status" 0 %}`.replace('0', retrainingJobId))
+        .then(response => response.json())
+        .then(data => {
+            const progress = data.progress;
+            const total = progress.total || 1;
+            const completed = progress.success + progress.failed;
+            const percentage = Math.round((completed / total) * 100);
+            
+            // Update progress bar
+            document.getElementById('progressBar').style.width = percentage + '%';
+            
+            // Update details
+            document.getElementById('progressDetails').innerHTML = `
+                <p><strong>Status:</strong> ${data.status}</p>
+                <p><strong>Progress:</strong> ${completed}/${total} meters</p>
+                <p><strong>Success:</strong> ${progress.success} | Failed: ${progress.failed}</p>
+                <p><strong>Improved:</strong> ${progress.improved} models replaced</p>
+            `;
+            
+            // Check if completed
+            if (data.status === 'completed' || data.status === 'failed' || data.status === 'partial') {
+                clearInterval(progressInterval);
+                document.getElementById('startButton').disabled = false;
+                
+                // Show final message
+                setTimeout(() => {
+                    alert(`Retraining ${data.status}!\n
+Success: ${progress.success}\n
+Failed: ${progress.failed}\n
+Improved: ${progress.improved}\n
+Duration: ${data.details.duration || 'N/A'} seconds`);
+                    window.location.reload();
+                }, 1000);
+            }
+        });
+}
+
+function retrainSingleMeter(meterId) {
+    if (confirm(`Retrain model for meter ${meterId}?`)) {
+        // Set scope to selected and check the meter
+        document.getElementById('scopeSelect').value = 'selected';
+        document.getElementById('meterSelectionSection').style.display = 'block';
+        
+        // Uncheck all first
+        deselectAllMeters();
+        
+        // Check the specific meter
+        const checkbox = document.querySelector(`#meter_${meterId}`);
+        if (checkbox) {
+            checkbox.checked = true;
+        }
+        
+        // Scroll to control panel
+        document.getElementById('startButton').scrollIntoView();
+        
+        alert(`Meter ${meterId} selected. Click "Start Retraining" to proceed.`);
+    }
+}
+
+function refreshPage() {
+    window.location.reload();
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

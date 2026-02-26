@@ -1,0 +1,217 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Login | Electricity Theft Detection</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background-color: #f4f6f9;
+        }
+
+        .auth-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* LEFT BRAND PANEL */
+        .auth-brand {
+            flex: 1;
+            background: #0d6efd;
+            color: #fff;
+            padding: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .auth-brand h1 {
+            font-size: 2.2rem;
+            font-weight: 600;
+        }
+
+        .auth-brand p {
+            opacity: 0.9;
+            max-width: 400px;
+            line-height: 1.6;
+        }
+
+        .auth-brand ul {
+            margin-top: 30px;
+            padding-left: 0;
+            list-style: none;
+        }
+
+        .auth-brand li {
+            margin-bottom: 12px;
+            font-size: 0.95rem;
+        }
+
+        .auth-brand li i {
+            margin-right: 10px;
+            color: #dbeafe;
+        }
+
+        /* RIGHT LOGIN PANEL */
+        .auth-form {
+            flex: 1;
+            background: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 380px;
+        }
+
+        .login-box h3 {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .login-box p {
+            color: #6b7280;
+            font-size: 0.9rem;
+            margin-bottom: 30px;
+        }
+
+        .form-floating input {
+            border-radius: 8px;
+        }
+
+        .btn-login {
+            background: #0d6efd;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-weight: 500;
+        }
+
+        .btn-login:hover {
+            background: #0b5ed7;
+        }
+
+        .toggle-pass {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #6b7280;
+        }
+
+        .demo-info {
+            background: #f8fafc;
+            border: 1px dashed #cbd5f5;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.8rem;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .auth-brand {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="auth-container">
+
+    <!-- LEFT -->
+    <div class="auth-brand">
+        <h1><i class="fas fa-bolt me-2"></i>Electricity Theft Detection</h1>
+        <p>
+            Secure administrative access for monitoring, analytics, 
+            and anomaly detection in smart electricity consumption systems.
+        </p>
+
+        <ul>
+            <li><i class="fas fa-shield-halved"></i> Secure Admin Authentication</li>
+            <li><i class="fas fa-chart-line"></i> Real-time Theft Analytics</li>
+            <li><i class="fas fa-database"></i> Smart Meter Data Monitoring</li>
+        </ul>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="auth-form">
+        <div class="login-box">
+
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            {% endif %}
+
+            <h3>Admin Login</h3>
+            <p>Please sign in with your admin credentials</p>
+
+            <form method="POST" action="{% url 'admin_login' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.GET.next }}">
+
+                <div class="form-floating mb-3 position-relative">
+                    <input type="text" class="form-control" id="username" name="username" placeholder="admin" required>
+                    <label for="username">Username</label>
+                </div>
+
+                <div class="form-floating mb-3 position-relative">
+                    <input type="password" class="form-control" id="password" name="password" placeholder="admin" required>
+                    <label for="password">Password</label>
+                    <span class="toggle-pass" id="togglePassword">
+                        <i class="fas fa-eye"></i>
+                    </span>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="remember" name="remember">
+                        <label class="form-check-label">Remember me</label>
+                    </div>
+                </div>
+
+                <button class="btn btn-login w-100" type="submit">
+                    Sign In
+                </button>
+                <div class="switch-link" style="align-items: center;">
+                    Admin? <a href="{% url 'users:login' %}">Login here</a>
+                </div>
+                <div class="demo-info">
+                    <strong>Demo Access</strong><br>
+                    Username: <code>admin</code> <br>
+                    Password: <code>admin</code>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById("togglePassword").onclick = function () {
+        const pwd = document.getElementById("password");
+        pwd.type = pwd.type === "password" ? "text" : "password";
+        this.querySelector("i").classList.toggle("fa-eye");
+        this.querySelector("i").classList.toggle("fa-eye-slash");
+    };
+</script>
+
+</body>
+</html>

@@ -1,0 +1,187 @@
+/* Admin Panel Custom Styles */
+
+/* Color Variables */
+:root {
+    --primary-color: #2c3e50;
+    --secondary-color: #3498db;
+    --success-color: #27ae60;
+    --warning-color: #f39c12;
+    --danger-color: #e74c3c;
+    --light-color: #ecf0f1;
+    --dark-color: #34495e;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.status-normal {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.status-suspicious {
+    background-color: var(--warning-color);
+    color: #212529;
+}
+
+.status-theft {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+/* Chart Container */
+.chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
+/* Card Hover Effects */
+.card-hover {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,.1);
+}
+
+/* Meter Card Grid */
+.meter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+}
+
+/* Progress Bar Custom */
+.progress-thin {
+    height: 5px;
+}
+
+.progress-medium {
+    height: 20px;
+}
+
+/* Table Custom */
+.table-custom {
+    font-size: 0.9rem;
+}
+
+.table-custom th {
+    font-weight: 600;
+    color: var(--dark-color);
+}
+
+/* Button Custom */
+.btn-retrain {
+    background-color: var(--warning-color);
+    border-color: var(--warning-color);
+    color: white;
+}
+
+.btn-retrain:hover {
+    background-color: #e67e22;
+    border-color: #e67e22;
+    color: white;
+}
+
+/* Alert Custom */
+.alert-custom {
+    border-left: 4px solid;
+}
+
+.alert-info-custom {
+    border-left-color: var(--secondary-color);
+}
+
+.alert-warning-custom {
+    border-left-color: var(--warning-color);
+}
+
+.alert-danger-custom {
+    border-left-color: var(--danger-color);
+}
+
+/* Timeline */
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -25px;
+    top: 5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--secondary-color);
+}
+
+/* Filter Panel */
+.filter-panel {
+    background-color: var(--light-color);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    border: 3px solid var(--light-color);
+    border-top: 3px solid var(--secondary-color);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .chart-container {
+        height: 250px;
+    }
+    
+    .meter-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #ddd;
+        break-inside: avoid;
+    }
+}

@@ -1,0 +1,457 @@
+{% extends 'users/base.html' %}
+
+{% block title %}Dashboard - {{ meter.meter_id }}{% endblock %}
+
+{% block content %}
+<style>
+            html, body {
+        font-family: "Plus Jakarta Sans", sans-serif;
+        font-optical-sizing: auto;
+        font-weight: 400;
+        font-style: normal;
+        }
+    </style>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </h4>
+                <div>
+                    <span class="badge bg-primary me-2">
+                        Meter: {{ meter.meter_id }}
+                    </span>
+                    <span class="badge bg-info">
+                        Dataset: {{ dataset_min_date|date:"M Y" }} - {{ dataset_max_date|date:"M Y" }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Dataset Information -->
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-database"></i> Historical Dataset Information
+                                </h6>
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <small class="text-muted">Dataset Period</small><br>
+                                        <strong>{{ dataset_min_date|date:"M d, Y" }} to {{ dataset_max_date|date:"M d, Y" }}</strong>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <small class="text-muted">Total Days in Dataset</small><br>
+                                        <strong>{{ total_days_in_dataset }} days</strong>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <small class="text-muted">Days with Predictions</small><br>
+                                        <strong>{{ total_stats.total_predicted }} days ({{ total_stats.dataset_coverage|floatformat:1 }}%)</strong>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <small class="text-muted">Current Simulation Day</small><br>
+                                        <strong>{{ current_simulated_day|date:"M d, Y" }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Three Prediction Cards -->
+                <div class="row mb-4">
+                    <!-- Last Day Prediction Card -->
+                    <!-- Last Day Prediction Card -->
+                    <div class="col-md-4">
+                        <div class="card text-center reading-card">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-calendar-day"></i> Last Day Prediction
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                {% if last_day_prediction %}
+                                    <div class="status-{{ last_day_prediction.classification|yesno:"success,warning,danger" }} status-badge d-inline-block mb-3">
+                                        {{ last_day_prediction.classification|upper }}
+                                        {% if last_day_prediction.is_injected %}
+                                            <span class="badge bg-warning ms-1">INJ</span>
+                                        {% endif %}
+                                    </div>
+                                    <h2>
+                                        {% if last_day_prediction.classification == 'normal' %}🟢
+                                        {% elif last_day_prediction.classification == 'suspicious' %}🟡
+                                        {% elif last_day_prediction.classification == 'theft' %}🔴
+                                        {% else %}⚪{% endif %}
+                                    </h2>
+                                    <p class="card-text">
+                                        <strong>Date:</strong> {{ last_day_prediction.date|date:"M d, Y" }}<br>
+                                        <strong>Score:</strong> {{ last_day_prediction.anomaly_score|floatformat:4 }}<br>
+                                        <strong>Confidence:</strong> {{ last_day_prediction.confidence|floatformat:2 }}
+                                    </p>
+                                    {% if last_day_prediction.is_injected %}
+                                    <div class="alert alert-warning py-1 mt-2">
+                                        <small><i class="fas fa-syringe"></i> Admin Injection Applied</small>
+                                    </div>
+                                    {% endif %}
+                                {% else %}
+                                    <div class="status-normal status-badge d-inline-block mb-3">
+                                        NO DATA
+                                    </div>
+                                    <h2>⚪</h2>
+                                    <p class="card-text">No prediction available</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Last 30 Days Card -->
+                    <div class="col-md-4">
+                        <div class="card text-center reading-card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-calendar-week"></i> Last 30 Days
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center mb-3">
+                                    <div class="col-4">
+                                        <div class="status-normal status-badge">
+                                            {{ last_30_stats.normal }}
+                                        </div>
+                                        <p class="mt-1 mb-0">
+                                            <small>Normal</small>
+                                        </p>
+                                        <p class="text-muted">
+                                            <small>{{ last_30_stats.normal_percentage|floatformat:1 }}%</small>
+                                        </p>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="status-suspicious status-badge">
+                                            {{ last_30_stats.suspicious }}
+                                        </div>
+                                        <p class="mt-1 mb-0">
+                                            <small>Suspicious</small>
+                                        </p>
+                                        <p class="text-muted">
+                                            <small>{{ last_30_stats.suspicious_percentage|floatformat:1 }}%</small>
+                                        </p>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="status-theft status-badge">
+                                            {{ last_30_stats.theft }}
+                                        </div>
+                                        <p class="mt-1 mb-0">
+                                            <small>Theft</small>
+                                        </p>
+                                        <p class="text-muted">
+                                            <small>{{ last_30_stats.theft_percentage|floatformat:1 }}%</small>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="progress mb-2">
+                                    {% widthratio last_30_stats.normal last_30_stats.total 100 as normal_percent %}
+                                    {% widthratio last_30_stats.suspicious last_30_stats.total 100 as suspicious_percent %}
+                                    {% widthratio last_30_stats.theft last_30_stats.total 100 as theft_percent %}
+                                    <div class="progress-bar bg-success" style="width: {{ normal_percent }}%"></div>
+                                    <div class="progress-bar bg-warning" style="width: {{ suspicious_percent }}%"></div>
+                                    <div class="progress-bar bg-danger" style="width: {{ theft_percent }}%"></div>
+                                </div>
+                                <small class="text-muted">
+                                    Total: {{ last_30_stats.total }} days
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Total Days Card -->
+                    <div class="col-md-4">
+                        <div class="card text-center reading-card">
+                            <div class="card-header bg-success text-white">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-chart-line"></i> Total Predictions
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center mb-3">
+                                    <div class="col-4">
+                                        <div class="status-normal status-badge">
+                                            {{ total_stats.normal }}
+                                        </div>
+                                        <p class="mt-1 mb-0">
+                                            <small>Normal</small>
+                                        </p>
+                                        <p class="text-muted">
+                                            <small>{{ total_stats.normal_percentage|floatformat:1 }}%</small>
+                                        </p>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="status-suspicious status-badge">
+                                            {{ total_stats.suspicious }}
+                                        </div>
+                                        <p class="mt-1 mb-0">
+                                            <small>Suspicious</small>
+                                        </p>
+                                        <p class="text-muted">
+                                            <small>{{ total_stats.suspicious_percentage|floatformat:1 }}%</small>
+                                        </p>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="status-theft status-badge">
+                                            {{ total_stats.theft }}
+                                        </div>
+                                        <p class="mt-1 mb-0">
+                                            <small>Theft</small>
+                                        </p>
+                                        <p class="text-muted">
+                                            <small>{{ total_stats.theft_percentage|floatformat:1 }}%</small>
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="progress mb-2">
+                                    {% widthratio total_stats.normal total_stats.total_predicted 100 as total_normal_percent %}
+                                    {% widthratio total_stats.suspicious total_stats.total_predicted 100 as total_suspicious_percent %}
+                                    {% widthratio total_stats.theft total_stats.total_predicted 100 as total_theft_percent %}
+                                    <div class="progress-bar bg-success" style="width: {{ total_normal_percent }}%"></div>
+                                    <div class="progress-bar bg-warning" style="width: {{ total_suspicious_percent }}%"></div>
+                                    <div class="progress-bar bg-danger" style="width: {{ total_theft_percent }}%"></div>
+                                </div>
+                                <small class="text-muted">
+                                    Dataset Coverage: {{ total_stats.dataset_coverage|floatformat:1 }}%<br>
+                                    Total: {{ total_stats.total_predicted }} of {{ total_days_in_dataset }} days
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Simulation Status & Current Day -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-play-circle"></i> Simulation Status
+                                </h6>
+                                <div class="simulation-progress mb-2">
+                                    <div id="simulation-progress-bar" class="simulation-progress-bar" 
+                                         style="width: {{ progress_percentage|floatformat:2 }}%">
+                                        {{ progress_percentage|floatformat:1 }}%
+                                    </div>
+                                </div>
+                                <p class="card-text">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle"></i>
+                                        Current: {{ current_simulated_day|date:"M d, Y" }} ({{ today_half_hour_progress }} half-hours)<br>
+                                        Speed: {{ profile.simulation_speed }} half-hour(s) per page load
+                                    </small>
+                                </p>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="refreshPage()">
+                                        <i class="fas fa-forward"></i> Advance Simulation
+                                    </button>
+                                    <a href="{% url 'users:daily' %}" class="btn btn-sm btn-outline-info">
+                                        <i class="fas fa-calendar-day"></i> View Current Day
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-sun"></i> Current Simulated Day
+                                </h5>
+                                <h2 class="text-warning mb-3">{{ today_total|floatformat:3 }} kWh</h2>
+                                <p class="card-text">
+                                    <strong>Date:</strong> {{ current_simulated_day|date:"M d, Y" }}<br>
+                                    <strong>Readings:</strong> {{ today_readings_count }} / 48 half-hours<br>
+                                    <strong>Progress:</strong> {{ today_half_hour_progress }}
+                                </p>
+                                <div class="progress mb-2">
+                                    {% widthratio today_readings_count 48 100 as today_progress %}
+                                    <div class="progress-bar bg-warning" style="width: {{ today_progress }}%">
+                                        {{ today_progress }}%
+                                    </div>
+                                </div>
+                                {% if current_day_anomaly %}
+                                <div class="mt-2">
+                                    <span class="status-{{ current_day_anomaly.get_color_code }} status-badge">
+                                        {{ current_day_anomaly.classification|upper }}
+                                    </span>
+                                    <small class="text-muted ms-2">Score: {{ current_day_anomaly.anomaly_score|floatformat:4 }}</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent Readings -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-history"></i> Recent Readings
+                                </h5>
+                                <span class="badge bg-secondary">
+                                    Showing latest 10 readings
+                                </span>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Time</th>
+                                                <th>Date</th>
+                                                <th>Consumption (kWh)</th>
+                                                <th>Status</th>
+                                                <th>Peak/Off-Peak</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for reading in latest_readings %}
+                                            <tr>
+                                                <td>{{ reading.get_time_label }}</td>
+                                                <td>{{ reading.timestamp|date:"M d, Y" }}</td>
+                                                <td class="fw-bold">{{ reading.consumption|floatformat:3 }}</td>
+                                                <td>
+                                                    {% if reading.anomaly_result %}
+                                                        <span class="status-{{ reading.anomaly_result.get_color_code }} status-badge">
+                                                            {{ reading.anomaly_result.classification|upper }}
+                                                            {% if reading.anomaly_result.is_injected %}
+                                                                <span class="badge bg-warning ms-1">I</span>
+                                                            {% endif %}
+                                                        </span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary">UNKNOWN</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if reading.is_peak %}
+                                                        <span class="badge bg-warning">PEAK</span>
+                                                    {% elif reading.is_off_peak %}
+                                                        <span class="badge bg-info">OFF-PEAK</span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary">N/A</span>
+                                                    {% endif %}
+                                                </td>
+                                            </tr>
+                                            {% empty %}
+                                            <tr>
+                                                <td colspan="5" class="text-center text-muted">
+                                                    No readings available. Refresh page to start simulation.
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row">
+    <div class="col-md-4">
+        <a href="{% url 'users:daily' %}" class="card text-decoration-none reading-card">
+            <div class="card-body text-center">
+                <h2><i class="fas fa-chart-bar text-primary"></i></h2>
+                <h5>Daily Consumption</h5>
+                <p class="text-muted">View 48 half-hour bars with color coding</p>
+            </div>
+        </a>
+    </div>
+    
+    <div class="col-md-4">
+        <a href="{% url 'users:timeline' %}" class="card text-decoration-none reading-card">
+            <div class="card-body text-center">
+                <h2><i class="fas fa-history text-success"></i></h2>
+                <h5>Anomaly Timeline</h5>
+                <p class="text-muted">Historical results with color-coded calendar</p>
+            </div>
+        </a>
+    </div>
+    
+    <div class="col-md-4">
+        <a href="{% url 'users:settings' %}" class="card text-decoration-none reading-card">
+            <div class="card-body text-center">
+                <h2><i class="fas fa-cog text-warning"></i></h2>
+                <h5>Settings</h5>
+                <p class="text-muted">Configure simulation speed and preferences</p>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Historical Dataset Info -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6><i class="fas fa-info-circle"></i> Historical Dataset Information</h6>
+                <div class="row">
+                    <div class="col-md-3">
+                        <small class="text-muted">Meter ID</small><br>
+                        <strong>{{ meter.meter_id }}</strong>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Location</small><br>
+                        <strong>{{ meter.location|default:"Not specified" }}</strong>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Simulation Pointer</small><br>
+                        <strong>{{ profile.current_pointer }}</strong>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Simulation Speed</small><br>
+                        <strong>{{ profile.simulation_speed }} half-hours/page</strong>
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-12">
+                        <small class="text-muted">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Note: This simulation uses historical electricity consumption data from {{ dataset_min_date|date:"Y" }} to {{ dataset_max_date|date:"Y" }}.
+                            The system advances through this historical data to simulate real-time monitoring.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-update simulation progress
+function updateSimulationProgress() {
+    fetch("{% url 'users:api_latest' %}")
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const progressBar = document.getElementById('simulation-progress-bar');
+                if (progressBar) {
+                    progressBar.style.width = data.simulation_progress + '%';
+                    progressBar.textContent = data.simulation_progress.toFixed(1) + '%';
+                }
+            }
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+// Update every 30 seconds
+setInterval(updateSimulationProgress, 30000);
+
+// Initial update
+document.addEventListener('DOMContentLoaded', updateSimulationProgress);
+</script>
+{% endblock %}

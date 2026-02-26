@@ -1,0 +1,630 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block title %}Injection Impact Report - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-chart-pie text-info"></i>
+            Anomaly Injection Impact Report
+        </h2>
+        <div class="d-flex">
+            <a href="{% url 'injection_management' %}" class="btn btn-outline-primary me-3">
+                <i class="fas fa-syringe"></i> Injection Management
+            </a>
+            <button class="btn btn-success" onclick="window.print()">
+                <i class="fas fa-print"></i> Print Report
+            </button>
+        </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body text-center">
+                    <div class="stat-value">{{ total_injections }}</div>
+                    <div class="stat-label">Total Injections</div>
+                    <small class="opacity-75">Since deployment</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body text-center">
+                    <div class="stat-value">{{ active_injections }}</div>
+                    <div class="stat-label">Active Injections</div>
+                    <small class="opacity-75">Currently affecting results</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body text-center">
+                    <div class="stat-value">{{ recent_injections.count }}</div>
+                    <div class="stat-label">Recent (30 days)</div>
+                    <small class="opacity-75">In last 30 days</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body text-center">
+                    <div class="stat-value">{{ by_meter|length }}</div>
+                    <div class="stat-label">Affected Meters</div>
+                    <small class="opacity-75">Unique meters injected</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="row">
+        <!-- Left Column: Charts -->
+        <div class="col-lg-8">
+            <!-- Distribution by Type -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar"></i> Distribution by Injection Type
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div style="height: 300px;">
+                                <canvas id="typeDistributionChart"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th class="text-end">Count</th>
+                                        <th class="text-end">%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for type_name, count in by_type.items %}
+                                    <tr>
+                                        <td>
+                                            {% if type_name == 'Normal' %}
+                                            <span class="badge bg-success">{{ type_name }}</span>
+                                            {% elif type_name == 'Suspicious' %}
+                                            <span class="badge bg-warning">{{ type_name }}</span>
+                                            {% elif type_name == 'Theft' %}
+                                            <span class="badge bg-danger">{{ type_name }}</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">{{ type_name }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end">{{ count }}</td>
+                                        <td class="text-end">
+                                            {% if total_injections > 0 %}
+                                            {% widthratio count total_injections 100 as percentage %}
+                                            {{ percentage|floatformat:1 }}%
+                                            {% else %}
+                                            0%
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="table-light">
+                                        <td><strong>Total</strong></td>
+                                        <td class="text-end"><strong>{{ total_injections }}</strong></td>
+                                        <td class="text-end"><strong>100%</strong></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top Meters by Injection Count -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-tachometer-alt"></i> Top Meters by Injection Count
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Rank</th>
+                                    <th>Meter ID</th>
+                                    <th>Injection Count</th>
+                                    <th>Types</th>
+                                    <th>Last Injection</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for meter_id, count in top_meters %}
+                                <tr>
+                                    <td>
+                                        <span class="badge {% if forloop.counter == 1 %}bg-danger{% elif forloop.counter == 2 %}bg-warning{% elif forloop.counter == 3 %}bg-info{% else %}bg-secondary{% endif %}">
+                                            #{{ forloop.counter }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'meter_detail' meter_id %}">
+                                            {{ meter_id }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                                {% if top_meters.0.1 > 0 %}
+                                                {% widthratio count top_meters.0.1 100 as progress_width %}
+                                                <div class="progress-bar bg-primary" 
+                                                     style="width: {{ progress_width }}%">
+                                                </div>
+                                                {% else %}
+                                                <div class="progress-bar bg-primary" style="width: 0%"></div>
+                                                {% endif %}
+                                            </div>
+                                            <span>{{ count }}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <!-- Show injection types for this meter -->
+                                        {% regroup injections by meter.meter_id as meter_injections %}
+                                        {% for group in meter_injections %}
+                                            {% if group.grouper == meter_id %}
+                                                {% for injection in group.list|slice:":3" %}
+                                                    {% if injection.injection_type == 'normal' %}
+                                                    <span class="badge bg-success">N</span>
+                                                    {% elif injection.injection_type == 'suspicious' %}
+                                                    <span class="badge bg-warning">S</span>
+                                                    {% elif injection.injection_type == 'theft' %}
+                                                    <span class="badge bg-danger">T</span>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        <!-- Get last injection date for this meter -->
+                                        {% regroup injections|dictsort:"-date" by meter.meter_id as meter_injections_by_date %}
+                                        {% for group in meter_injections_by_date %}
+                                            {% if group.grouper == meter_id %}
+                                                {{ group.list.0.date|date:"Y-m-d" }}
+                                            {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{% url 'meter_detail' meter_id %}" 
+                                               class="btn btn-outline-primary">
+                                                <i class="fas fa-chart-line"></i>
+                                            </a>
+                                            <a href="{% url 'injection_management' %}?meter_id={{ meter_id }}" 
+                                               class="btn btn-outline-info">
+                                                <i class="fas fa-syringe"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        <i class="fas fa-info-circle"></i>
+                                        No injection data available
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Insights -->
+        <div class="col-lg-4">
+            <!-- Recent Injections -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history"></i> Recent Injections (30 days)
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        {% for injection in recent_injections %}
+                        <div class="border-bottom p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>{{ injection.meter.meter_id }}</strong><br>
+                                    <small class="text-muted">{{ injection.date }}</small>
+                                </div>
+                                <div class="text-end">
+                                    {% if injection.injection_type == 'normal' %}
+                                    <span class="badge bg-success">Normal</span>
+                                    {% elif injection.injection_type == 'suspicious' %}
+                                    <span class="badge bg-warning">Suspicious</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">Theft</span>
+                                    {% endif %}
+                                    <br>
+                                    <small class="text-muted">{{ injection.get_time_slot_display }}</small>
+                                </div>
+                            </div>
+                            {% if injection.reason %}
+                            <div class="mt-2">
+                                <small><i>{{ injection.reason|truncatechars:60 }}</i></small>
+                            </div>
+                            {% endif %}
+                            <div class="mt-2 d-flex justify-content-between">
+                                <small>
+                                    {% if injection.created_by %}
+                                    by {{ injection.created_by.username }}
+                                    {% else %}
+                                    by System
+                                    {% endif %}
+                                </small>
+                                <small>{{ injection.created_at|timesince }} ago</small>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="text-center p-4 text-muted">
+                            <i class="fas fa-info-circle fa-2x mb-2"></i><br>
+                            No recent injections
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Insights -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-lightbulb"></i> Key Insights
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6>Most Common Type</h6>
+                        <div class="d-flex align-items-center">
+                            {% with most_common=by_type|dictsort:"1"|last %}
+                            {% if most_common.0 == 'Normal' %}
+                            <span class="badge bg-success me-2">Normal</span>
+                            {% elif most_common.0 == 'Suspicious' %}
+                            <span class="badge bg-warning me-2">Suspicious</span>
+                            {% else %}
+                            <span class="badge bg-danger me-2">Theft</span>
+                            {% endif %}
+                            {% if total_injections > 0 %}
+                            {% widthratio most_common.1 total_injections 100 as percentage %}
+                            <span>{{ most_common.1 }} injections ({{ percentage|floatformat:1 }}%)</span>
+                            {% else %}
+                            <span>{{ most_common.1 }} injections (0%)</span>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Most Active Meter</h6>
+                        {% if top_meters %}
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-danger me-2">{{ top_meters.0.0 }}</span>
+                            <span>{{ top_meters.0.1 }} injections</span>
+                        </div>
+                        {% else %}
+                        <div class="text-muted">No data</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Activity Trend</h6>
+                        {% if recent_injections.count > 0 %}
+                        <div class="text-success">
+                            <i class="fas fa-arrow-up"></i>
+                            {{ recent_injections.count }} injections in last 30 days
+                        </div>
+                        {% else %}
+                        <div class="text-muted">No recent activity</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>Active Rate</h6>
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1 me-2" style="height: 10px;">
+                                {% if total_injections > 0 %}
+                                {% widthratio active_injections total_injections 100 as active_percentage %}
+                                <div class="progress-bar bg-success" 
+                                     style="width: {{ active_percentage }}%">
+                                </div>
+                                {% else %}
+                                <div class="progress-bar bg-success" style="width: 0%"></div>
+                                {% endif %}
+                            </div>
+                            <span>
+                                {% if total_injections > 0 %}
+                                {{ active_percentage|floatformat:1 }}%
+                                {% else %}
+                                0%
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info mt-4">
+                        <small>
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Note:</strong> These statistics help understand injection patterns
+                            and their impact on anomaly detection results.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Table -->
+    <div class="card mt-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-table"></i> Detailed Injection Records
+            </h5>
+            <small class="text-muted">Showing {{ injections|slice:":50"|length }} of {{ total_injections }} records</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Meter ID</th>
+                            <th>Date</th>
+                            <th>Time Slot</th>
+                            <th>Type</th>
+                            <th>Score</th>
+                            <th>Confidence</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for injection in injections|slice:":50" %}
+                        <tr>
+                            <td>#{{ injection.id }}</td>
+                            <td>
+                                <a href="{% url 'meter_detail' injection.meter.meter_id %}">
+                                    {{ injection.meter.meter_id }}
+                                </a>
+                            </td>
+                            <td>{{ injection.date }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ injection.get_time_slot_display }}</span>
+                            </td>
+                            <td>
+                                {% if injection.injection_type == 'normal' %}
+                                <span class="badge bg-success">Normal</span>
+                                {% elif injection.injection_type == 'suspicious' %}
+                                <span class="badge bg-warning">Suspicious</span>
+                                {% else %}
+                                <span class="badge bg-danger">Theft</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ injection.injected_score|floatformat:3 }}</td>
+                            <td>{{ injection.injected_confidence|floatformat:2 }}</td>
+                            <td>
+                                {% if injection.reason %}
+                                <small data-bs-toggle="tooltip" title="{{ injection.reason }}">
+                                    {{ injection.reason|truncatechars:30 }}
+                                </small>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if injection.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ injection.created_at|date:"Y-m-d H:i" }}</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'edit_injection' injection.id %}" 
+                                       class="btn btn-outline-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                   
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="11" class="text-center text-muted">
+                                <i class="fas fa-info-circle me-2"></i>
+                                No injection records found
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Section -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-download"></i> Export Report
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <button class="btn btn-outline-primary w-100" onclick="exportToCSV()">
+                        <i class="fas fa-file-csv"></i> Export to CSV
+                    </button>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <button class="btn btn-outline-success w-100" onclick="exportToJSON()">
+                        <i class="fas fa-file-code"></i> Export to JSON
+                    </button>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <button class="btn btn-outline-danger w-100" onclick="generatePDF()">
+                        <i class="fas fa-file-pdf"></i> Generate PDF Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Type Distribution Chart
+function initTypeDistributionChart() {
+    const ctx = document.getElementById('typeDistributionChart').getContext('2d');
+    
+    const labels = [];
+    const data = [];
+    const backgroundColors = [];
+    const borderColors = [];
+    
+    {% for type_name, count in by_type.items %}
+    labels.push('{{ type_name }}');
+    data.push({{ count }});
+    
+    {% if type_name == 'Normal' %}
+    backgroundColors.push('rgba(40, 167, 69, 0.7)');
+    borderColors.push('rgba(40, 167, 69, 1)');
+    {% elif type_name == 'Suspicious' %}
+    backgroundColors.push('rgba(255, 193, 7, 0.7)');
+    borderColors.push('rgba(255, 193, 7, 1)');
+    {% elif type_name == 'Theft' %}
+    backgroundColors.push('rgba(220, 53, 69, 0.7)');
+    borderColors.push('rgba(220, 53, 69, 1)');
+    {% else %}
+    backgroundColors.push('rgba(108, 117, 125, 0.7)');
+    borderColors.push('rgba(108, 117, 125, 1)');
+    {% endif %}
+    {% endfor %}
+    
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: backgroundColors,
+                borderColor: borderColors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        boxWidth: 20,
+                        padding: 15
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.raw || 0;
+                            const total = {{ total_injections }};
+                            const percentage = Math.round((value / total) * 100);
+                            return `${label}: ${value} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Export functions
+function exportToCSV() {
+    alert('CSV export would be implemented here. For now, use the browser\'s Print to PDF feature.');
+}
+
+function exportToJSON() {
+    alert('JSON export would be implemented here. For now, use the browser\'s Print to PDF feature.');
+}
+
+function generatePDF() {
+    alert('PDF generation would require additional setup. For now, use the Print button or browser\'s Print to PDF feature.');
+}
+
+// Initialize tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Chart.js
+    initTypeDistributionChart();
+    
+    // Initialize Bootstrap tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+
+// Print-friendly styles
+window.addEventListener('beforeprint', () => {
+    document.querySelectorAll('.btn, .btn-group').forEach(el => {
+        el.style.display = 'none';
+    });
+});
+
+window.addEventListener('afterprint', () => {
+    document.querySelectorAll('.btn, .btn-group').forEach(el => {
+        el.style.display = '';
+    });
+});
+</script>
+
+<style>
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+@media print {
+    .btn, .btn-group, .card-header .d-flex {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #dee2e6 !important;
+    }
+    
+    .stat-card {
+        border: 1px solid #dee2e6 !important;
+    }
+}
+</style>
+{% endblock %}

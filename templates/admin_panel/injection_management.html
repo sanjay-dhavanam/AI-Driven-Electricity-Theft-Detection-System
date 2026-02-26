@@ -1,0 +1,394 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block title %}Anomaly Injection Management - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-syringe text-danger"></i>
+            Anomaly Injection Management
+        </h2>
+        <div class="d-flex">
+            <a href="{% url 'injection_report' %}" class="btn btn-info me-3">
+                <i class="fas fa-chart-pie"></i> Impact Report
+            </a>
+            <a href="{% url 'create_injection' %}" class="btn btn-success">
+                <i class="fas fa-plus"></i> New Injection
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Panel -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-filter"></i> Filter Injections
+            </h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Meter ID</label>
+                    <select class="form-select" name="meter_id">
+                        <option value="">All Meters</option>
+                        {% for meter in all_meters %}
+                        <option value="{{ meter.meter_id }}" 
+                                {% if meter.meter_id == filter_meter_id %}selected{% endif %}>
+                            {{ meter.meter_id }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Injection Type</label>
+                    <select class="form-select" name="type">
+                        <option value="">All Types</option>
+                        <option value="normal" {% if filter_type == 'normal' %}selected{% endif %}>Normal</option>
+                        <option value="suspicious" {% if filter_type == 'suspicious' %}selected{% endif %}>Suspicious</option>
+                        <option value="theft" {% if filter_type == 'theft' %}selected{% endif %}>Theft</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select class="form-select" name="active">
+                        <option value="true" {% if filter_active %}selected{% endif %}>Active Only</option>
+                        <option value="false" {% if not filter_active %}selected{% endif %}>All</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter"></i> Apply
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-primary">{{ stats.total }}</div>
+                    <div class="stat-label">Total Injections</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-success">{{ stats.active }}</div>
+                    <div class="stat-label">Active</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-success">{{ stats.normal }}</div>
+                    <div class="stat-label">Normal</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-warning">{{ stats.suspicious }}</div>
+                    <div class="stat-label">Suspicious</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-danger">{{ stats.theft }}</div>
+                    <div class="stat-label">Theft</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-info">{{ stats.time_slot }}</div>
+                    <div class="stat-label">Time Slot</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Injections Table -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                <i class="fas fa-list"></i> All Injections ({{ injections.count }})
+            </h5>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" onclick="exportInjections()">
+                    <i class="fas fa-download"></i> Export
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Meter ID</th>
+                            <th>Date</th>
+                            <th>Time Slot</th>
+                            <th>Type</th>
+                            <th>Score</th>
+                            <th>Reason</th>
+                            <th>Status</th>
+                            <th>Created By</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for injection in injections %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'meter_detail' injection.meter.meter_id %}">
+                                    {{ injection.meter.meter_id }}
+                                </a>
+                            </td>
+                            <td>{{ injection.date }}</td>
+                            <td>{{ injection.get_time_slot_display }}</td>
+                            <td>
+                                {% if injection.injection_type == 'normal' %}
+                                <span class="badge bg-success">Normal</span>
+                                {% elif injection.injection_type == 'suspicious' %}
+                                <span class="badge bg-warning">Suspicious</span>
+                                {% else %}
+                                <span class="badge bg-danger">Theft</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ injection.injected_score|floatformat:3 }}</td>
+                            <td>
+                                {% if injection.reason %}
+                                <span class="badge bg-info" data-bs-toggle="tooltip" 
+                                      title="{{ injection.reason }}">
+                                    <i class="fas fa-info-circle"></i>
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if injection.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if injection.created_by %}
+                                {{ injection.created_by.username }}
+                                {% else %}
+                                System
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'edit_injection' injection.id %}" 
+                                       class="btn btn-outline-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{% url 'delete_injection' injection.id %}" 
+                                       class="btn btn-outline-danger"
+                                       onclick="return confirm('Delete this injection?')">
+                                        <i class="fas fa-trash"></i>
+                                    </a>
+                                    <button class="btn btn-outline-info" 
+                                            onclick="showInjectionDetails({{ injection.id }})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted">
+                                <i class="fas fa-info-circle me-2"></i>
+                                No injections found.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            {% if injections.has_other_pages %}
+            <nav aria-label="Page navigation" class="mt-3">
+                <ul class="pagination justify-content-center">
+                    {% if injections.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ injections.previous_page_number }}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for num in injections.paginator.page_range %}
+                    {% if injections.number == num %}
+                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                    {% else %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+                    
+                    {% if injections.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ injections.next_page_number }}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-bolt"></i> Quick Actions
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <button class="btn btn-warning w-100" onclick="deactivateExpired()">
+                        <i class="fas fa-clock"></i> Deactivate Expired
+                    </button>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <button class="btn btn-danger w-100" onclick="bulkDeactivate()">
+                        <i class="fas fa-ban"></i> Deactivate All
+                    </button>
+                </div>
+                <div class="col-md-4 mb-3">
+                   
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Injection Details Modal -->
+<div class="modal fade" id="injectionDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Injection Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="injectionDetailsContent">
+                <!-- Details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showInjectionDetails(injectionId) {
+    fetch(`/admin-panel/injections/${injectionId}/details/`)
+        .then(response => response.json())
+        .then(data => {
+            const content = document.getElementById('injectionDetailsContent');
+            content.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="table table-sm">
+                            <tr><th>Meter ID:</th><td>${data.meter_id}</td></tr>
+                            <tr><th>Date:</th><td>${data.date}</td></tr>
+                            <tr><th>Time Slot:</th><td>${data.time_slot}</td></tr>
+                            <tr><th>Type:</th><td>${data.type}</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <table class="table table-sm">
+                            <tr><th>Score:</th><td>${data.score}</td></tr>
+                            <tr><th>Confidence:</th><td>${data.confidence}</td></tr>
+                            <tr><th>Status:</th><td>${data.is_active ? 'Active' : 'Inactive'}</td></tr>
+                            <tr><th>Created:</th><td>${data.created_at}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Reason:</h6>
+                        <p class="border p-2 rounded">${data.reason || 'No reason provided'}</p>
+                    </div>
+                </div>
+                ${data.consumption_override ? `
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h6>Consumption Override:</h6>
+                        <pre class="border p-2 rounded">${JSON.stringify(data.consumption_override, null, 2)}</pre>
+                    </div>
+                </div>
+                ` : ''}
+            `;
+            const modal = new bootstrap.Modal(document.getElementById('injectionDetailsModal'));
+            modal.show();
+        });
+}
+
+function exportInjections() {
+    const params = new URLSearchParams(window.location.search);
+    window.location.href = `/admin-panel/api/injections/export/?${params.toString()}`;
+}
+
+function deactivateExpired() {
+    if (confirm('Deactivate all expired injections?')) {
+        fetch('/admin-panel/api/injections/deactivate-expired/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            alert(`Deactivated ${data.count} expired injections`);
+            window.location.reload();
+        });
+    }
+}
+
+function bulkDeactivate() {
+    if (confirm('Deactivate ALL injections? This cannot be undone.')) {
+        fetch('/admin-panel/api/injections/bulk-deactivate/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            alert(`Deactivated ${data.count} injections`);
+            window.location.reload();
+        });
+    }
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,357 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block title %}Meter Overview - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-tachometer-alt text-primary"></i>
+            Meter Overview
+        </h2>
+        <div class="d-flex">
+            <div class="input-group me-3 time-picker">
+                <span class="input-group-text">
+                    <i class="fas fa-calendar-alt"></i>
+                </span>
+                <input type="date" class="form-control" id="dateFilter" value="{{ current_date|date:'Y-m-d' }}">
+                <button class="btn btn-primary" onclick="filterByDate()">
+                    <i class="fas fa-filter"></i>
+                </button>
+            </div>
+            <button class="btn btn-success" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i> Refresh Data
+            </button>
+        </div>
+    </div>
+
+    <!-- System Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-primary">{{ total_meters }}</div>
+                    <div class="stat-label">Total Meters</div>
+                    <small class="text-muted">{{ meters_with_models }} with ML models</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-success">{{ recent_anomalies }}</div>
+                    <div class="stat-label">Recent Anomalies</div>
+                    <small class="text-muted">Last 7 days</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-warning">{{ recent_suspicious }}</div>
+                    <div class="stat-label">Suspicious Cases</div>
+                    <small class="text-muted">Requires investigation</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-danger">{{ recent_thefts }}</div>
+                    <div class="stat-label">Theft Detections</div>
+                    <small class="text-muted">Immediate action needed</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meter Grid -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-tachometer me-2"></i>
+                All Meters ({{ meter_data|length }})
+                <span class="badge bg-secondary ms-2">Data as of {{ current_date }}</span>
+            </h5>
+            <div class="mt-2">
+                <button class="btn btn-sm btn-outline-primary me-2" onclick="filterMeters('all')">All</button>
+                <button class="btn btn-sm btn-outline-success me-2" onclick="filterMeters('normal')">Normal</button>
+                <button class="btn btn-sm btn-outline-warning me-2" onclick="filterMeters('suspicious')">Suspicious</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="filterMeters('theft')">Theft</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for data in meter_data %}
+                <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+                    <div class="card meter-card h-100" onclick="window.location='{% url 'meter_detail' data.meter.meter_id %}'" style="cursor: pointer;">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-bolt text-warning"></i>
+                                    {{ data.meter.meter_id }}
+                                </h6>
+                                {% if data.active_model %}
+                                <span class="badge bg-success">Model Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">No Model</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <!-- Latest Anomaly Status -->
+                            {% if data.latest_anomaly %}
+                            <div class="mb-3">
+                                <small class="text-muted">Latest Classification</small>
+                                <div class="d-flex align-items-center mt-1">
+                                    {% if data.latest_anomaly.classification == 'normal' %}
+                                    <span class="badge bg-success me-2">
+                                        <i class="fas fa-check-circle"></i> NORMAL
+                                    </span>
+                                    {% elif data.latest_anomaly.classification == 'suspicious' %}
+                                    <span class="badge bg-warning me-2">
+                                        <i class="fas fa-exclamation-triangle"></i> SUSPICIOUS
+                                    </span>
+                                    {% elif data.latest_anomaly.classification == 'theft' %}
+                                    <span class="badge bg-danger me-2">
+                                        <i class="fas fa-skull-crossbones"></i> THEFT
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-secondary me-2">
+                                        <i class="fas fa-question-circle"></i> UNKNOWN
+                                    </span>
+                                    {% endif %}
+                                    
+                                    {% if data.latest_anomaly.is_injected %}
+                                    <span class="badge bg-info" title="Manual Injection">
+                                        <i class="fas fa-user-edit"></i>
+                                    </span>
+                                    {% endif %}
+                                    
+                                    <small class="text-muted ms-auto">{{ data.latest_anomaly.date }}</small>
+                                </div>
+                                <div class="mt-2">
+                                    <small class="text-muted">Score: {{ data.latest_anomaly.anomaly_score|floatformat:3 }}</small>
+                                    <div class="progress" style="height: 5px;">
+                                        {% with confidence_percentage=data.latest_anomaly.confidence|default:0|floatformat:2 %}
+                                        {% with width_percentage=confidence_percentage|floatformat:0 %}
+                                        {% if data.latest_anomaly.classification == 'normal' %}
+                                        <div class="progress-bar bg-success" style="width: {{ width_percentage }}%"></div>
+                                        {% elif data.latest_anomaly.classification == 'suspicious' %}
+                                        <div class="progress-bar bg-warning" style="width: {{ width_percentage }}%"></div>
+                                        {% elif data.latest_anomaly.classification == 'theft' %}
+                                        <div class="progress-bar bg-danger" style="width: {{ width_percentage }}%"></div>
+                                        {% else %}
+                                        <div class="progress-bar bg-secondary" style="width: {{ width_percentage }}%"></div>
+                                        {% endif %}
+                                        {% endwith %}
+                                        {% endwith %}
+                                    </div>
+                                    {% if data.latest_anomaly.is_injected and data.latest_anomaly.injection_reason %}
+                                    <small class="text-info d-block mt-1">
+                                        <i class="fas fa-info-circle"></i> {{ data.latest_anomaly.injection_reason|truncatechars:50 }}
+                                    </small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="mb-3">
+                                <small class="text-muted">Latest Classification</small>
+                                <div class="d-flex align-items-center mt-1">
+                                    <span class="badge bg-secondary me-2">
+                                        <i class="fas fa-question-circle"></i> NO DATA
+                                    </span>
+                                    <small class="text-muted ms-auto">No anomaly data</small>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Latest Consumption -->
+                            {% if data.latest_consumption %}
+                            <div class="mb-3">
+                                <small class="text-muted">Latest Consumption</small>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <h5 class="mb-0">{{ data.latest_consumption.total_consumption|floatformat:2 }} kWh</h5>
+                                    <small class="text-muted">{{ data.latest_consumption.date }}</small>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="mb-3">
+                                <small class="text-muted">Latest Consumption</small>
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <h5 class="mb-0 text-muted">N/A</h5>
+                                    <small class="text-muted">No consumption data</small>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- 30-Day Stats -->
+                            <div class="border-top pt-2">
+                                <small class="text-muted">Last 30 Days</small>
+                                <div class="row text-center mt-2">
+                                    <div class="col-4">
+                                        <div class="text-success">
+                                            <div style="font-size: 1.2rem;">{{ data.stats.normal_count|default:0 }}</div>
+                                            <small>Normal</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="text-warning">
+                                            <div style="font-size: 1.2rem;">{{ data.stats.suspicious_count|default:0 }}</div>
+                                            <small>Suspicious</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="text-danger">
+                                            <div style="font-size: 1.2rem;">{{ data.stats.theft_count|default:0 }}</div>
+                                            <small>Theft</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Meter Info -->
+                            <div class="border-top pt-2 mt-2">
+                                <small class="text-muted d-block">
+                                    <i class="fas fa-map-marker-alt me-1"></i>
+                                    {{ data.meter.location|default:"Location not set" }}
+                                </small>
+                                {% if data.meter.acorn_group %}
+                                <small class="text-muted">
+                                    <i class="fas fa-users me-1"></i>
+                                    {{ data.meter.acorn_group }}
+                                </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="card-footer bg-transparent border-top">
+                            <div class="d-flex justify-content-between">
+                                <a href="{% url 'meter_detail' data.meter.meter_id %}" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-chart-line"></i> Details
+                                </a>
+                                <div>
+                                    <a href="{% url 'admin:core_meter_change' data.meter.meter_id %}" class="btn btn-sm btn-outline-secondary me-1">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <!-- <button class="btn btn-sm btn-outline-info" 
+                                            onclick="event.stopPropagation(); injectMeter('{{ data.meter.meter_id }}')">
+                                        <i class="fas fa-syringe"></i>
+                                    </button> -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-12">
+                    <div class="alert alert-warning text-center">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No meters found in the system.
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-bolt me-2"></i>
+                Quick Actions
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <a href="{% url 'admin:core_meter_add' %}" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-plus me-2"></i>Add New Meter
+                    </a>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <a href="{% url 'admin_analytics' %}" class="btn btn-outline-success w-100">
+                        <i class="fas fa-chart-bar me-2"></i>View Analytics
+                    </a>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <a href="{% url 'retraining_control' %}" class="btn btn-outline-warning w-100">
+                        <i class="fas fa-cogs me-2"></i>Adaptive Learning
+                    </a>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <a href="{% url 'injection_management' %}" class="btn btn-outline-info w-100">
+                        <i class="fas fa-syringe me-2"></i>Manage Injections
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterByDate() {
+    const date = document.getElementById('dateFilter').value;
+    window.location.href = `?date=${date}`;
+}
+
+function refreshData() {
+    window.location.reload();
+}
+
+// Filter meters by status
+function filterMeters(status) {
+    const cards = document.querySelectorAll('.meter-card');
+    cards.forEach(card => {
+        const badge = card.querySelector('.badge:not(.bg-secondary):not(.bg-success):not(.bg-info)');
+        if (status === 'all') {
+            card.style.display = 'block';
+        } else if (badge) {
+            const badgeText = badge.textContent.toLowerCase();
+            if (badgeText.includes(status)) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function injectMeter(meterId) {
+    const today = new Date().toISOString().split('T')[0];
+    window.location.href = `/admin-panel/create-injection/?meter_id=${meterId}&date=${today}`;
+}
+</script>
+
+<style>
+.meter-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 1px solid #e0e0e0;
+}
+.meter-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+.stat-card {
+    border: none;
+    border-radius: 10px;
+}
+.stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+}
+.stat-label {
+    font-size: 1rem;
+    color: #666;
+}
+.badge {
+    font-size: 0.75rem;
+}
+.progress {
+    background-color: #e9ecef;
+}
+</style>
+{% endblock %}

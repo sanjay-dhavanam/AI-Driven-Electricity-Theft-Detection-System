@@ -1,0 +1,360 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block title %}Create Injection - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-syringe"></i> Create New Anomaly Injection
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'create_injection' %}" id="injectionForm">
+                        {% csrf_token %}
+                        
+                        <!-- Step 1: Meter Selection -->
+                        <div class="mb-4">
+                            <h5 class="border-bottom pb-2">
+                                <i class="fas fa-tachometer-alt"></i> Step 1: Select Meter
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <label class="form-label">Meter ID *</label>
+                                    <select class="form-select" id="meterSelect" name="meter_id" required>
+                                        <option value="">Select a meter...</option>
+                                        {% for meter in meters %}
+                                        <option value="{{ meter.meter_id }}">{{ meter.meter_id }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Quick Preview</label>
+                                    <button type="button" class="btn btn-info w-100" 
+                                            onclick="previewMeterInfo()">
+                                        <i class="fas fa-eye"></i> View Meter Info
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="meterInfo" class="mt-3" style="display: none;">
+                                <!-- Meter info will be loaded here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Step 2: Date and Time -->
+                        <div class="mb-4">
+                            <h5 class="border-bottom pb-2">
+                                <i class="fas fa-calendar-alt"></i> Step 2: Date & Time
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label">Date *</label>
+                                    <input type="date" class="form-control" name="date" 
+                                           value="{{ today|date:'Y-m-d' }}" 
+                                           min="2011-01-01" max="2014-12-31" required>
+                                    <small class="text-muted">Dataset range: 2011-2014</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Time Slot</label>
+                                    <select class="form-select" name="time_slot">
+                                        {% for value, label in time_slot_choices %}
+                                        <option value="{{ value }}" 
+                                                {% if value == 'full_day' %}selected{% endif %}>
+                                            {{ label }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="text-muted">Select specific 30-minute slot or full day</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 3: Injection Type -->
+                        <div class="mb-4">
+                            <h5 class="border-bottom pb-2">
+                                <i class="fas fa-exclamation-triangle"></i> Step 3: Injection Type
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label class="form-label">Injection Type *</label>
+                                    <select class="form-select" id="injectionTypeSelect" 
+                                            name="injection_type" required>
+                                        {% for value, label in injection_type_choices %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Preview Impact</label>
+                                    <button type="button" class="btn btn-warning w-100" 
+                                            onclick="previewInjectionImpact()">
+                                        <i class="fas fa-chart-line"></i> Preview Impact
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Type Descriptions -->
+                            <div class="row mt-3">
+                                <div class="col-md-4">
+                                    <div class="card border-success">
+                                        <div class="card-body text-center">
+                                            <h6 class="text-success">
+                                                <i class="fas fa-check-circle"></i> Normal
+                                            </h6>
+                                            <small>Mark as normal consumption</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card border-warning">
+                                        <div class="card-body text-center">
+                                            <h6 class="text-warning">
+                                                <i class="fas fa-exclamation-triangle"></i> Suspicious
+                                            </h6>
+                                            <small>Flag for investigation</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card border-danger">
+                                        <div class="card-body text-center">
+                                            <h6 class="text-danger">
+                                                <i class="fas fa-skull-crossbones"></i> Theft
+                                            </h6>
+                                            <small>Mark as electricity theft</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 4: Reason and Notes -->
+                        <div class="mb-4">
+                            <h5 class="border-bottom pb-2">
+                                <i class="fas fa-sticky-note"></i> Step 4: Reason & Notes
+                            </h5>
+                            <div class="mb-3">
+                                <label class="form-label">Reason for Injection *</label>
+                                <textarea class="form-control" name="reason" rows="3" 
+                                          placeholder="Explain why you're injecting this anomaly..." required></textarea>
+                                <small class="text-muted">Examples: "Scheduled maintenance", "Known meter fault", "Test case for demonstration"</small>
+                            </div>
+                            
+                            <!-- Quick Reason Buttons -->
+                            <div class="mb-3">
+                                <label class="form-label">Quick Reasons:</label>
+                                <div class="btn-group w-100" role="group">
+                                    <button type="button" class="btn btn-outline-secondary" 
+                                            onclick="setReason('Scheduled maintenance - meter offline')">
+                                        Maintenance
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary"
+                                            onclick="setReason('Meter fault investigation')">
+                                        Fault
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary"
+                                            onclick="setReason('Academic demonstration')">
+                                        Demo
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary"
+                                            onclick="setReason('Known theft case - police investigation')">
+                                        Police Case
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Preview Section -->
+                        <div class="card mb-4 border-info" id="previewSection" style="display: none;">
+                            <div class="card-header bg-info text-white">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-eye"></i> Injection Preview
+                                </h6>
+                            </div>
+                            <div class="card-body" id="previewContent">
+                                <!-- Preview will be loaded here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Form Actions -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'injection_management' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save"></i> Create Injection
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Information Card -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle"></i> Important Notes
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li>Injection will override ML predictions for the selected date/time</li>
+                        <li>Injected results are clearly marked as "Injected" in user views</li>
+                        <li>Injections do NOT automatically retrain ML models</li>
+                        <li>Use for: testing, demonstrations, correcting known errors</li>
+                        <li>Full-day injections affect all 48 half-hour readings</li>
+                        <li>Time-slot injections only affect specific 30-minute period</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Get CSRF token for AJAX requests
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function previewMeterInfo() {
+    const meterId = document.getElementById('meterSelect').value;
+    if (!meterId) {
+        alert('Please select a meter first');
+        return;
+    }
+    
+    fetch(`/admin-panel/api/meter-info/${meterId}/`)
+        .then(response => response.json())
+        .then(data => {
+            const meterInfoDiv = document.getElementById('meterInfo');
+            meterInfoDiv.innerHTML = `
+                <div class="alert alert-info">
+                    <h6>Meter Information</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>ID:</strong> ${data.meter_id}<br>
+                            <strong>Location:</strong> ${data.location || 'N/A'}<br>
+                            <strong>ACORN Group:</strong> ${data.acorn_group || 'N/A'}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Status:</strong> ${data.is_active ? 'Active' : 'Inactive'}<br>
+                            <strong>Active Model:</strong> ${data.has_model ? 'Yes' : 'No'}<br>
+                            <strong>Consumption Records:</strong> ${data.consumption_count}
+                        </div>
+                    </div>
+                </div>
+            `;
+            meterInfoDiv.style.display = 'block';
+        });
+}
+
+function previewInjectionImpact() {
+    const meterId = document.getElementById('meterSelect').value;
+    const date = document.querySelector('input[name="date"]').value;
+    const injectionType = document.getElementById('injectionTypeSelect').value;
+    
+    if (!meterId || !date || !injectionType) {
+        alert('Please fill in meter, date, and type first');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('meter_id', meterId);
+    formData.append('date', date);
+    formData.append('injection_type', injectionType);
+    
+    fetch('{% url "injection_preview" %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+        
+        const preview = data.pview;
+        const previewSection = document.getElementById('previewSection');
+        const previewContent = document.getElementById('previewContent');
+        
+        previewContent.innerHTML = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Current Prediction:</h6>
+                    <div class="card ${preview.current.classification === 'No result' ? 'border-secondary' : 
+                                      preview.current.classification === 'Normal' ? 'border-success' : 
+                                      preview.current.classification === 'Suspicious' ? 'border-warning' : 'border-danger'}">
+                        <div class="card-body">
+                            <strong>Status:</strong> ${preview.current.classification}<br>
+                            <strong>Score:</strong> ${preview.current.score.toFixed(3)}<br>
+                            <strong>Confidence:</strong> ${(preview.current.confidence * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>After Injection:</h6>
+                    <div class="card ${injectionType === 'normal' ? 'border-success' : 
+                                      injectionType === 'suspicious' ? 'border-warning' : 'border-danger'}">
+                        <div class="card-body">
+                            <strong>Status:</strong> ${injectionType.toUpperCase()}<br>
+                            <strong>Score:</strong> ${preview.injection.score.toFixed(3)}<br>
+                            <strong>Confidence:</strong> ${(preview.injection.confidence * 100).toFixed(1)}%<br>
+                            <strong>Impact:</strong> ${preview.injection.impact}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-3 alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>Note:</strong> ${preview.current.exists ? 
+                    'ML prediction will be overridden' : 
+                    'New anomaly result will be created'}
+            </div>
+        `;
+        
+        previewSection.style.display = 'block';
+    });
+}
+
+function setReason(reason) {
+    document.querySelector('textarea[name="reason"]').value = reason;
+}
+
+// Form validation
+document.getElementById('injectionForm').addEventListener('submit', function(event) {
+    const meterId = document.getElementById('meterSelect').value;
+    const date = document.querySelector('input[name="date"]').value;
+    const injectionType = document.getElementById('injectionTypeSelect').value;
+    const reason = document.querySelector('textarea[name="reason"]').value;
+    
+    if (!meterId || !date || !injectionType || !reason.trim()) {
+        event.preventDefault();
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    if (!confirm('Create this anomaly injection?')) {
+        event.preventDefault();
+    }
+});
+</script>
+{% endblock %}

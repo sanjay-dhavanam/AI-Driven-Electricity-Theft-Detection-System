@@ -1,0 +1,52 @@
+# Django
+*.log
+*.pot
+*.pyc
+__pycache__/
+*.sqlite3-journal
+db.sqlite3
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Media and Static
+/media/
+/staticfiles/
+
+# Data files (keep small sample if needed)
+/data/block_files/*.csv
+!data/block_files/sample*.csv
+
+# Models
+data/trained_models/*.pkl
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-delete-this-directory.txt
+
+# Test
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints

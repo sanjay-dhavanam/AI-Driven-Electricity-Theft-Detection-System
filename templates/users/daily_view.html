@@ -1,0 +1,481 @@
+{% extends 'users/base.html' %}
+
+{% block title %}Daily View - {{ meter.meter_id }}{% endblock %}
+
+{% block extra_css %}
+<style>
+            html, body {
+        font-family: "Plus Jakarta Sans", sans-serif;
+        font-optical-sizing: auto;
+        font-weight: 400;
+        font-style: normal;
+        }
+    </style>
+<style>
+    .time-slots {
+        display: grid;
+        grid-template-columns: repeat(24, 1fr);
+        gap: 2px;
+        margin-bottom: 20px;
+    }
+    
+    .time-slot {
+        text-align: center;
+        font-size: 0.8em;
+        color: #666;
+        padding: 5px 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .half-hour-grid {
+        display: grid;
+        grid-template-columns: repeat(48, 1fr);
+        gap: 2px;
+        height: 100px;
+    }
+    
+    .half-hour-cell {
+        position: relative;
+        border-radius: 3px;
+        transition: all 0.3s;
+        cursor: pointer;
+    }
+    
+    .half-hour-cell:hover {
+        transform: scale(1.1);
+        z-index: 10;
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    }
+    
+    .half-hour-label {
+        position: absolute;
+        bottom: -25px;
+        left: 0;
+        right: 0;
+        font-size: 0.7em;
+        text-align: center;
+        color: #666;
+    }
+    
+    .consumption-tooltip {
+        position: absolute;
+        top: -30px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 0.8em;
+        white-space: nowrap;
+        display: none;
+        z-index: 100;
+    }
+    
+    .half-hour-cell:hover .consumption-tooltip {
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-chart-bar"></i> Daily Consumption View
+                </h4>
+                <div>
+                    <span class="badge bg-primary me-2">
+                        {{ selected_date|date:"F d, Y" }}
+                    </span>
+                    {% if anomaly_result %}
+                        <span class="status-{{ anomaly_result.classification }} status-badge">
+                            {{ anomaly_result.classification|upper }}
+                        </span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Date Navigation -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <nav aria-label="Date navigation">
+                            <ul class="pagination justify-content-center">
+                                {% if prev_date %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{% url 'users:daily_with_date' prev_date|date:'Y-m-d' %}">
+                                        <i class="fas fa-chevron-left"></i> Previous Day
+                                    </a>
+                                </li>
+                                {% endif %}
+                                
+                                <li class="page-item">
+                                    <input type="date" 
+                                           class="form-control" 
+                                           id="datePicker"
+                                           value="{{ selected_date|date:'Y-m-d' }}"
+                                           onchange="changeDate(this.value)">
+                                </li>
+                                
+                                {% if next_date %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{% url 'users:daily_with_date' next_date|date:'Y-m-d' %}">
+                                        Next Day <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                </div>
+                
+                <!-- Statistics -->
+                <div class="row mb-4">
+                    <div class="col-md-3 col-6">
+                        <div class="card bg-light text-center">
+                            <div class="card-body">
+                                <h6 class="card-title">Total Consumption</h6>
+                                <h3 class="text-primary">{{ total_consumption|floatformat:3 }} kWh</h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6">
+                        <div class="card bg-light text-center">
+                            <div class="card-body">
+                                <h6 class="card-title">Average per Half-Hour</h6>
+                                <h3 class="text-success">{{ avg_consumption|floatformat:3 }} kWh</h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6">
+                        <div class="card bg-light text-center">
+                            <div class="card-body">
+                                <h6 class="card-title">Peak Consumption</h6>
+                                <h3 class="text-warning">{{ max_consumption|floatformat:3 }} kWh</h3>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6">
+                        <div class="card bg-light text-center">
+                            <div class="card-body">
+                                <h6 class="card-title">Readings Available</h6>
+                                <h3 class="text-info">{{ daily_readings|length }} / 48</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Half-Hour Grid Visualization -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Half-Hour Consumption Grid</h5>
+                                <p class="text-muted mb-0">
+                                    Hover over any bar to see details. Colors indicate anomaly status.
+                                </p>
+                            </div>
+                            <div class="card-body">
+                                <!-- Time labels (hours) -->
+                                <div class="time-slots">
+                                    {% for hour in "01234567891011121314151617181920212223"|make_list %}
+                                        <div class="time-slot">{{ hour }}:00</div>
+                                    {% endfor %}
+                                </div>
+                                
+                                <!-- Half-hour bars -->
+                                <div class="half-hour-grid">
+                                    {% for reading in daily_readings %}
+                                    {% if reading.anomaly_result %}
+                                        {% with color=reading.anomaly_result.get_color_code %}
+                                            <div class="half-hour-cell"
+                                                style="background-color: {{ color }};
+                                                        height: {{ reading.consumption|default:0|floatformat:2 }}%"
+                                                data-bs-toggle="tooltip"
+                                                title="{{ reading.get_time_label }}: {{ reading.consumption|floatformat:3 }} kWh">
+                                                <div class="consumption-tooltip">
+                                                    {{ reading.consumption|floatformat:3 }} kWh
+                                                </div>
+                                            </div>
+                                        {% endwith %}
+                                    {% else %}
+                                        <div class="half-hour-cell"
+                                            style="background-color: #2196F3;
+                                                    height: {{ reading.consumption|default:0|floatformat:2 }}%"
+                                            data-bs-toggle="tooltip"
+                                            title="{{ reading.get_time_label }}: {{ reading.consumption|floatformat:3 }} kWh">
+                                            <div class="consumption-tooltip">
+                                                {{ reading.consumption|floatformat:3 }} kWh
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chart.js Visualization -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Consumption Chart</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="chart-container">
+                                    <canvas id="consumptionChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Anomaly Details -->
+                {% if anomaly_result %}
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Anomaly Analysis for {{ selected_date|date:"F d, Y" }}</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3 text-center">
+                                        <h1>{{ anomaly_result.get_icon }}</h1>
+                                        <div class="status-{{ anomaly_result.classification }} status-badge mt-2">
+                                            {{ anomaly_result.classification|upper }}
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-9">
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Anomaly Score</label>
+                                                    <div class="form-control bg-light">
+                                                        {{ anomaly_result.anomaly_score|floatformat:4 }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Confidence</label>
+                                                    <div class="form-control bg-light">
+                                                        {{ anomaly_result.confidence|floatformat:2 }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Peak Hour</label>
+                                                    <div class="form-control bg-light">
+                                                        {{ anomaly_result.peak_hour|default:"N/A" }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="row">
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Normal Threshold</label>
+                                                    <div class="form-control bg-light">
+                                                        {{ anomaly_result.threshold_normal|floatformat:4 }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Suspicious Threshold</label>
+                                                    <div class="form-control bg-light">
+                                                        {{ anomaly_result.threshold_suspicious|floatformat:4 }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="col-md-4">
+                                                <div class="mb-3">
+                                                    <label class="form-label">Theft Threshold</label>
+                                                    <div class="form-control bg-light">
+                                                        {{ anomaly_result.threshold_theft|floatformat:4 }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Interpretation:</strong>
+                                            {% if anomaly_result.classification == 'normal' %}
+                                                Consumption patterns appear normal for this day.
+                                            {% elif anomaly_result.classification == 'suspicious' %}
+                                                Unusual consumption detected. Monitor closely.
+                                            {% elif anomaly_result.classification == 'theft' %}
+                                                Significant anomaly detected. Possible electricity theft.
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    })
+    
+    // Date picker function
+    function changeDate(dateString) {
+        window.location.href = "{% url 'users:daily_with_date' '2024-01-01' %}".replace('2024-01-01', dateString);
+    }
+    
+    // Chart.js implementation
+    document.addEventListener('DOMContentLoaded', function() {
+        const chartData = {{ chart_data_json|safe }};
+        
+        const ctx = document.getElementById('consumptionChart').getContext('2d');
+        
+        // Determine bar colors based on anomaly status
+        let barColors = [];
+        if ({{ anomaly_result.classification|default:"'unknown'"|safe }} !== 'unknown') {
+            const colorMap = {
+                'normal': '#4CAF50',
+                'suspicious': '#FF9800', 
+                'theft': '#F44336'
+            };
+            const anomalyColor = colorMap[{{ anomaly_result.classification|default:"'normal'"|safe }}] || '#2196F3';
+            barColors = Array(chartData.labels.length).fill(anomalyColor);
+        } else {
+            // Color by time of day (blue for night, orange for day)
+            barColors = chartData.labels.map((label, index) => {
+                const hour = parseInt(label.split(':')[0]);
+                return (hour >= 7 && hour < 23) ? '#FF9800' : '#2196F3';
+            });
+        }
+        
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    label: 'Consumption (kWh)',
+                    data: chartData.consumptions,
+                    backgroundColor: barColors,
+                    borderColor: barColors.map(color => color.replace('0.8', '1')),
+                    borderWidth: 1,
+                    borderRadius: 5,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.parsed.y.toFixed(3)} kWh`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time of Day (30-minute intervals)'
+                        },
+                        ticks: {
+                            maxTicksLimit: 24,
+                            callback: function(value, index) {
+                                // Show every 2nd label to avoid clutter
+                                return index % 2 === 0 ? this.getLabelForValue(value) : '';
+                            }
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Consumption (kWh)'
+                        },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+        
+        // Add threshold lines if anomaly result exists
+        {% if anomaly_result %}
+        chart.options.plugins.annotation = {
+            annotations: {
+                normalThreshold: {
+                    type: 'line',
+                    yMin: {{ anomaly_result.threshold_normal|default:0 }},
+                    yMax: {{ anomaly_result.threshold_normal|default:0 }},
+                    borderColor: '#4CAF50',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    label: {
+                        display: true,
+                        content: 'Normal Threshold',
+                        position: 'end'
+                    }
+                },
+                suspiciousThreshold: {
+                    type: 'line',
+                    yMin: {{ anomaly_result.threshold_suspicious|default:0 }},
+                    yMax: {{ anomaly_result.threshold_suspicious|default:0 }},
+                    borderColor: '#FF9800',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    label: {
+                        display: true,
+                        content: 'Suspicious Threshold',
+                        position: 'end'
+                    }
+                },
+                theftThreshold: {
+                    type: 'line',
+                    yMin: {{ anomaly_result.threshold_theft|default:0 }},
+                    yMax: {{ anomaly_result.threshold_theft|default:0 }},
+                    borderColor: '#F44336',
+                    borderWidth: 2,
+                    borderDash: [5, 5],
+                    label: {
+                        display: true,
+                        content: 'Theft Threshold',
+                        position: 'end'
+                    }
+                }
+            }
+        };
+        chart.update();
+        {% endif %}
+    });
+</script>
+{% endblock %}

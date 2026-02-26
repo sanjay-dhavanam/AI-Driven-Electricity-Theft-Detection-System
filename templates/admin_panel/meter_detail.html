@@ -1,0 +1,604 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block title %}{{ meter.meter_id }} - Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-0">
+                <i class="fas fa-bolt text-warning"></i>
+                Meter: {{ meter.meter_id }}
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{% url 'admin_overview' %}">Overview</a></li>
+                    <li class="breadcrumb-item active">{{ meter.meter_id }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex">
+            <div class="input-group me-3 time-picker">
+                <select class="form-select" id="daysFilter" onchange="updateDateRange()">
+                    <option value="7" {% if days == 7 %}selected{% endif %}>Last 7 days</option>
+                    <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>
+                    <option value="90" {% if days == 90 %}selected{% endif %}>Last 90 days</option>
+                    <option value="180" {% if days == 180 %}selected{% endif %}>Last 180 days</option>
+                    <option value="custom">Custom range</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-primary">{{ stats.total_days }}</div>
+                    <div class="stat-label">Days in Range</div>
+                    <small class="text-muted">{{ date_range }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-success">{{ stats.avg_consumption|floatformat:2 }}</div>
+                    <div class="stat-label">Avg kWh/Day</div>
+                    <small class="text-muted">Range: {{ stats.min_consumption|floatformat:2 }}-{{ stats.max_consumption|floatformat:2 }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-warning">{{ stats.suspicious_days }}</div>
+                    <div class="stat-label">Suspicious Days</div>
+                    <small class="text-muted">{{ stats.normal_days }} normal, {{ stats.theft_days }} theft</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card bg-light">
+                <div class="card-body">
+                    <div class="stat-value text-danger">{{ stats.theft_days }}</div>
+                    <div class="stat-label">Theft Detections</div>
+                    <small class="text-muted">Requires investigation</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- Consumption Chart -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line me-2"></i>
+                        Daily Consumption Trend
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="consumptionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Anomaly Classification Chart -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Anomaly Classification
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="classificationChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Half-Hour Consumption and Anomaly Timeline -->
+    <div class="row mb-4">
+        <!-- Half-Hour Consumption -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-clock me-2"></i>
+                        Half-Hour Consumption Pattern
+                    </h5>
+                    <small class="text-muted">
+                        Latest: {{ latest_consumption.date|default:"No data" }}
+                    </small>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="halfHourChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Anomaly Timeline -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history me-2"></i>
+                        Anomaly Timeline
+                    </h5>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    {% for anomaly in anomaly_results %}
+                    <div class="timeline-item mb-3">
+                        <div class="d-flex">
+                            <div class="flex-shrink-0">
+                                {% if anomaly.classification == 'normal' %}
+                                <span class="badge bg-success p-2">
+                                    <i class="fas fa-check"></i>
+                                </span>
+                                {% elif anomaly.classification == 'suspicious' %}
+                                <span class="badge bg-warning p-2">
+                                    <i class="fas fa-exclamation"></i>
+                                </span>
+                                {% else %}
+                                <span class="badge bg-danger p-2">
+                                    <i class="fas fa-times"></i>
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div class="flex-grow-1 ms-3">
+                                <div class="d-flex justify-content-between">
+                                    <strong>{{ anomaly.date }}</strong>
+                                    <small class="text-muted">{{ anomaly.anomaly_score|floatformat:3 }}</small>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span>
+                                        {{ anomaly.get_classification_display }}
+                                        <small class="text-muted ms-2">Confidence: {{ anomaly.confidence|floatformat:2 }}</small>
+                                    </span>
+                                    <a href="{% url 'admin:core_anomalyresult_change' anomaly.id %}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="fas fa-search"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No anomaly results found for this date range.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Versions and Data Tables -->
+    <div class="row">
+        <!-- Model Versions -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-code-branch me-2"></i>
+                        Model Versions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Version</th>
+                                    <th>Trained On</th>
+                                    <th>Status</th>
+                                    <th>Performance</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for version in model_versions %}
+                                <tr>
+                                    <td><strong>v{{ version.version_number }}</strong></td>
+                                    <td>{{ version.trained_on|default:"N/A" }}</td>
+                                    <td>
+                                        {% if version.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if version.validation_f1 %}
+                                        <span class="badge bg-info">F1: {{ version.validation_f1|floatformat:3 }}</span>
+                                        {% else %}
+                                        <span class="badge bg-light text-dark">No data</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'admin:core_modelversion_change' version.id %}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        {% if not version.is_active %}
+                                        <button class="btn btn-sm btn-outline-success" onclick="activateModel({{ version.id }})">
+                                            <i class="fas fa-play"></i>
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">
+                                        <i class="fas fa-exclamation-circle me-2"></i>
+                                        No model versions found
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Consumption Data -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-table me-2"></i>
+                        Recent Consumption Data
+                    </h5>
+                    <small>Showing {{ consumption_data.count }} records</small>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Total kWh</th>
+                                <th>Avg kWh</th>
+                                <th>Max kWh</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for consumption in consumption_data|slice:":10" %}
+                            <tr>
+                                <td>{{ consumption.date }}</td>
+                                <td>{{ consumption.total_consumption|floatformat:2 }}</td>
+                                <td>{{ consumption.average_consumption|floatformat:2 }}</td>
+                                <td>{{ consumption.max_consumption|floatformat:2 }}</td>
+                                <td>
+                                    {% if consumption.anomaly %}
+                                        {% if consumption.anomaly.classification == 'normal' %}
+                                            <span class="badge bg-success">Normal</span>
+                                        {% elif consumption.anomaly.classification == 'suspicious' %}
+                                            <span class="badge bg-warning">Suspicious</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Theft</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="badge bg-secondary">No result</span>
+                                    {% endif %}
+                                </td>
+
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">
+                                    No consumption data found
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Meter Information -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-info-circle me-2"></i>
+                Meter Information
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-borderless">
+                        <tr>
+                            <th width="40%">Meter ID:</th>
+                            <td>{{ meter.meter_id }}</td>
+                        </tr>
+                        <tr>
+                            <th>Location:</th>
+                            <td>{{ meter.location|default:"Not specified" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Customer:</th>
+                            <td>{{ meter.customer_name|default:"Not specified" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>
+                                {% if meter.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-borderless">
+                        <tr>
+                            <th width="40%">ACORN Group:</th>
+                            <td>{{ meter.acorn_group|default:"Not specified" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Tariff Type:</th>
+                            <td>{{ meter.stdorToU|default:"Not specified" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Created:</th>
+                            <td>{{ meter.created_date|date:"Y-m-d" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Last Updated:</th>
+                            <td>{{ meter.updated_date|date:"Y-m-d" }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer">
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'admin_overview' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Overview
+                </a>
+                <div>
+                    <a href="{% url 'admin:core_meter_change' meter.meter_id %}" class="btn btn-primary me-2">
+                        <i class="fas fa-edit"></i> Edit Meter
+                    </a>
+                    <a href="{% url 'admin:core_dailyconsumption_changelist' %}?meter__meter_id={{ meter.meter_id }}" class="btn btn-info me-2">
+                        <i class="fas fa-database"></i> View All Data
+                    </a>
+                    <button class="btn btn-warning" onclick="retrainModel('{{ meter.meter_id }}')">
+                        <i class="fas fa-cogs"></i> Retrain Model
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Parse chart data from Django template
+const chartData = JSON.parse('{{ chart_data|safe }}');
+const halfHourData = {{ half_hour_data|safe }};
+
+function updateDateRange() {
+    const days = document.getElementById('daysFilter').value;
+    if (days === 'custom') {
+        const startDate = prompt('Enter start date (YYYY-MM-DD):', '{{ start_date|date:"Y-m-d" }}');
+        const endDate = prompt('Enter end date (YYYY-MM-DD):', '{{ end_date|date:"Y-m-d" }}');
+        if (startDate && endDate) {
+            window.location.href = `?days=custom&start_date=${startDate}&end_date=${endDate}`;
+        }
+    } else {
+        window.location.href = `?days=${days}`;
+    }
+}
+
+function refreshData() {
+    window.location.reload();
+}
+
+function activateModel(versionId) {
+    if (confirm('Are you sure you want to activate this model version?')) {
+        fetch(`/admin/core/modelversion/${versionId}/activate/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Model activated successfully!');
+                window.location.reload();
+            } else {
+                alert('Error activating model: ' + data.error);
+            }
+        });
+    }
+}
+
+function retrainModel(meterId) {
+    if (confirm(`Retrain model for meter ${meterId}? This may take a few minutes.`)) {
+        // In a real implementation, this would trigger a retraining job
+        alert(`Retraining scheduled for ${meterId}. Check retraining logs for progress.`);
+        window.location.href = "{% url 'retraining_control' %}";
+    }
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+// Initialize charts when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Consumption Chart
+    if (chartData.dates.length > 0) {
+        const consumptionCtx = document.getElementById('consumptionChart').getContext('2d');
+        new Chart(consumptionCtx, {
+            type: 'line',
+            data: {
+                labels: chartData.dates,
+                datasets: [{
+                    label: 'Daily Consumption (kWh)',
+                    data: chartData.consumption,
+                    borderColor: '#3498db',
+                    backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Consumption (kWh)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                }
+            }
+        });
+
+        // Classification Chart
+        const classificationCtx = document.getElementById('classificationChart').getContext('2d');
+        
+        // Count classifications
+        const normalCount = chartData.classifications.filter(c => c === 0).length;
+        const suspiciousCount = chartData.classifications.filter(c => c === 1).length;
+        const theftCount = chartData.classifications.filter(c => c === 2).length;
+        
+        new Chart(classificationCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Normal', 'Suspicious', 'Theft'],
+                datasets: [{
+                    data: [normalCount, suspiciousCount, theftCount],
+                    backgroundColor: [
+                        '#27ae60', // Green
+                        '#f39c12', // Yellow
+                        '#e74c3c'  // Red
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = normalCount + suspiciousCount + theftCount;
+                                const percentage = Math.round((context.raw / total) * 100);
+                                return `${context.label}: ${context.raw} days (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Half-Hour Chart
+    if (halfHourData.length > 0) {
+        const halfHourCtx = document.getElementById('halfHourChart').getContext('2d');
+        new Chart(halfHourCtx, {
+            type: 'bar',
+            data: {
+                labels: halfHourData.map(d => d.time),
+                datasets: [{
+                    label: 'Consumption (kWh)',
+                    data: halfHourData.map(d => d.consumption),
+                    backgroundColor: halfHourData.map(d => {
+                        // Color based on time of day
+                        const hour = d.hour;
+                        if (hour >= 6 && hour <= 18) {
+                            return 'rgba(52, 152, 219, 0.7)'; // Daytime
+                        } else {
+                            return 'rgba(155, 89, 182, 0.7)'; // Nighttime
+                        }
+                    }),
+                    borderColor: '#2c3e50',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Consumption (kWh)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time of Day'
+                        },
+                        ticks: {
+                            maxTicksLimit: 12
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

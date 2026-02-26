@@ -1,0 +1,413 @@
+{% extends 'users/base.html' %}
+
+{% block title %}Anomaly Timeline - {{ meter.meter_id }}{% endblock %}
+
+{% block extra_css %}
+<style>
+            html, body {
+        font-family: "Plus Jakarta Sans", sans-serif;
+        font-optical-sizing: auto;
+        font-weight: 400;
+        font-style: normal;
+        }
+    </style>
+<style>
+    .timeline-month {
+        margin-bottom: 30px;
+        padding: 20px;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .timeline-header {
+        border-bottom: 2px solid #e9ecef;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .timeline-day {
+        display: flex;
+        align-items: center;
+        padding: 10px 15px;
+        margin-bottom: 8px;
+        border-radius: 8px;
+        background-color: #f8f9fa;
+        transition: all 0.3s;
+    }
+    
+    .timeline-day:hover {
+        transform: translateX(5px);
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    }
+    
+    .timeline-color-indicator {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 15px;
+        flex-shrink: 0;
+    }
+    
+    .timeline-date {
+        font-weight: 600;
+        min-width: 120px;
+    }
+    
+    .timeline-status {
+        margin-left: auto;
+        margin-right: 15px;
+    }
+    
+    .timeline-score {
+        font-family: 'Courier New', monospace;
+        background-color: white;
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid #dee2e6;
+        font-size: 0.9em;
+    }
+    
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .calendar-day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 5px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .calendar-day:hover {
+        transform: scale(1.1);
+    }
+    
+    .calendar-day.empty {
+        background-color: transparent;
+        cursor: default;
+    }
+    
+    .calendar-day.today {
+        border: 2px solid #007bff;
+    }
+    
+    .calendar-header {
+        text-align: center;
+        font-weight: 600;
+        margin-bottom: 10px;
+        color: #6c757d;
+    }
+    
+    .stats-card {
+        height: 100%;
+    }
+    
+    .stats-icon {
+        font-size: 2.5em;
+        opacity: 0.8;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="fas fa-history"></i> Anomaly Timeline
+                </h4>
+                <div>
+                    <span class="badge bg-primary">
+                        Total: {{ total_results }} days analyzed
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Statistics Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3 col-6">
+                        <div class="card stats-card bg-light text-center">
+                            <div class="card-body">
+                                <div class="stats-icon text-success mb-2">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <h3>{{ normal_results }}</h3>
+                                <p class="text-muted mb-1">Normal Days</p>
+                                <div class="progress">
+                                    <div class="progress-bar bg-success" 
+                                         style="width: {{ normal_percentage }}%">
+                                    </div>
+                                </div>
+                                <small class="text-muted">{{ normal_percentage|floatformat:1 }}%</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6">
+                        <div class="card stats-card bg-light text-center">
+                            <div class="card-body">
+                                <div class="stats-icon text-warning mb-2">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                </div>
+                                <h3>{{ suspicious_results }}</h3>
+                                <p class="text-muted mb-1">Suspicious Days</p>
+                                <div class="progress">
+                                    <div class="progress-bar bg-warning" 
+                                         style="width: {{ suspicious_percentage }}%">
+                                    </div>
+                                </div>
+                                <small class="text-muted">{{ suspicious_percentage|floatformat:1 }}%</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6">
+                        <div class="card stats-card bg-light text-center">
+                            <div class="card-body">
+                                <div class="stats-icon text-danger mb-2">
+                                    <i class="fas fa-exclamation-circle"></i>
+                                </div>
+                                <h3>{{ theft_results }}</h3>
+                                <p class="text-muted mb-1">Theft Days</p>
+                                <div class="progress">
+                                    <div class="progress-bar bg-danger" 
+                                         style="width: {{ theft_percentage }}%">
+                                    </div>
+                                </div>
+                                <small class="text-muted">{{ theft_percentage|floatformat:1 }}%</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3 col-6">
+                        <div class="card stats-card bg-light text-center">
+                            <div class="card-body">
+                                <div class="stats-icon text-primary mb-2">
+                                    <i class="fas fa-chart-line"></i>
+                                </div>
+                                <h3>{{ total_results }}</h3>
+                                <p class="text-muted mb-1">Total Analyzed</p>
+                                <div class="progress">
+                                    <div class="progress-bar bg-primary" style="width: 100%"></div>
+                                </div>
+                                <small class="text-muted">100% coverage</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Date Filter -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-body">
+                                <h5 class="card-title">
+                                    <i class="fas fa-filter"></i> Filter Timeline
+                                </h5>
+                                <form method="get" class="row g-3">
+                                    <div class="col-md-5">
+                                        <label for="start_date" class="form-label">Start Date</label>
+                                        <input type="date" class="form-control" id="start_date" name="start_date">
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label for="end_date" class="form-label">End Date</label>
+                                        <input type="date" class="form-control" id="end_date" name="end_date">
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <button type="submit" class="btn btn-primary w-100">
+                                            <i class="fas fa-search"></i> Filter
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Calendar View -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Monthly Calendar View</h5>
+                                <p class="text-muted mb-0">Click on any day to view detailed analysis</p>
+                            </div>
+                            <div class="card-body">
+                                {% for month_data in timeline_data|slice:":3" %}
+                                <div class="timeline-month mb-4">
+                                    <div class="timeline-header">
+                                        <h5 class="mb-0">
+                                            <i class="fas fa-calendar-alt"></i>
+                                            {{ month_data.month }}
+                                        </h5>
+                                    </div>
+                                    
+                                    <!-- Calendar grid -->
+                                    <div class="calendar-grid mb-3">
+                                        <!-- Day headers -->
+                                        <div class="calendar-header">Sun</div>
+                                        <div class="calendar-header">Mon</div>
+                                        <div class="calendar-header">Tue</div>
+                                        <div class="calendar-header">Wed</div>
+                                        <div class="calendar-header">Thu</div>
+                                        <div class="calendar-header">Fri</div>
+                                        <div class="calendar-header">Sat</div>
+                                        
+                                        {% comment %}
+                                        Note: For a real calendar, you'd need to calculate day positions.
+                                        This is a simplified version showing anomaly days.
+                                        {% endcomment %}
+                                        
+                                        {% for day in month_data.results|slice:":31" %}
+                                            {% with color_map=day.color %}
+                                            <div class="calendar-day"
+                                                 style="background-color: 
+                                                 {% if color_map == 'success' %}#4CAF50
+                                                 {% elif color_map == 'warning' %}#FF9800
+                                                 {% elif color_map == 'danger' %}#F44336
+                                                 {% else %}#e9ecef{% endif %};
+                                                 color: {% if color_map == 'success' or color_map == 'danger' %}white{% else %}black{% endif %};"
+                                                 onclick="viewDay('{{ day.date|date:'Y-m-d' }}')">
+                                                {{ day.date.day }}
+                                            </div>
+                                            {% endwith %}
+                                        {% endfor %}
+                                    </div>
+                                    
+                                    <!-- List view -->
+                                    <div class="timeline-list">
+                                        {% for day in month_data.results %}
+                                        <div class="timeline-day" onclick="viewDay('{{ day.date|date:'Y-m-d' }}')" style="cursor: pointer;">
+                                            <div class="timeline-color-indicator"
+                                                 style="background-color: 
+                                                 {% if day.color == 'success' %}#4CAF50
+                                                 {% elif day.color == 'warning' %}#FF9800
+                                                 {% elif day.color == 'danger' %}#F44336
+                                                 {% else %}#6c757d{% endif %};">
+                                            </div>
+                                            
+                                            <div class="timeline-date">
+                                                {{ day.date|date:"F d, Y" }}
+                                            </div>
+                                            
+                                            <div class="timeline-status">
+                                                <span class="status-{{ day.classification }} status-badge">
+                                                    {{ day.classification|upper }}
+                                                </span>
+                                            </div>
+                                            
+                                            <div class="timeline-score">
+                                                {{ day.score|floatformat:4 }}
+                                            </div>
+                                            
+                                            <div class="ms-3">
+                                                <i class="fas fa-chevron-right text-muted"></i>
+                                            </div>
+                                        </div>
+                                        {% empty %}
+                                        <div class="text-center text-muted py-4">
+                                            <i class="fas fa-calendar-times fa-2x mb-3"></i>
+                                            <p>No anomaly data for this month</p>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                {% empty %}
+                                <div class="text-center py-5">
+                                    <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                                    <h5>No Timeline Data Available</h5>
+                                    <p class="text-muted">Run the simulation to generate anomaly timeline data</p>
+                                    <button class="btn btn-primary" onclick="refreshPage()">
+                                        <i class="fas fa-play"></i> Start Simulation
+                                    </button>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Color Legend -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-palette"></i> Color Legend
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="d-flex align-items-center mb-3">
+                                            <div class="timeline-color-indicator" style="background-color: #4CAF50;"></div>
+                                            <div class="ms-3">
+                                                <h6 class="mb-0">Normal</h6>
+                                                <p class="text-muted mb-0">Consumption patterns appear normal</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-4">
+                                        <div class="d-flex align-items-center mb-3">
+                                            <div class="timeline-color-indicator" style="background-color: #FF9800;"></div>
+                                            <div class="ms-3">
+                                                <h6 class="mb-0">Suspicious</h6>
+                                                <p class="text-muted mb-0">Unusual consumption detected</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="col-md-4">
+                                        <div class="d-flex align-items-center mb-3">
+                                            <div class="timeline-color-indicator" style="background-color: #F44336;"></div>
+                                            <div class="ms-3">
+                                                <h6 class="mb-0">Theft</h6>
+                                                <p class="text-muted mb-0">Possible electricity theft detected</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info">
+                                    <i class="fas fa-lightbulb"></i>
+                                    <strong>Tip:</strong> Click on any day in the timeline to view detailed consumption data and anomaly analysis for that specific day.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Function to view a specific day
+    function viewDay(dateString) {
+        window.location.href = "{% url 'users:daily_with_date' '2024-01-01' %}".replace('2024-01-01', dateString);
+    }
+    
+    // Set today's date in filter end_date
+    document.addEventListener('DOMContentLoaded', function() {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('end_date').value = today;
+        
+        // Set start date to 30 days ago
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        document.getElementById('start_date').value = thirtyDaysAgo.toISOString().split('T')[0];
+    });
+</script>
+{% endblock %}

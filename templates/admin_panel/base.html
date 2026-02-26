@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Electricity Theft Detection - Admin Panel{% endblock %}</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-color: #ecf0f1;
+            --dark-color: #34495e;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        
+        .navbar-admin {
+            background-color: var(--primary-color);
+            box-shadow: 0 2px 4px rgba(0,0,0,.1);
+        }
+        
+        .sidebar {
+            position: fixed;
+            top: 56px;
+            left: 0;
+            bottom: 0;
+            width: 250px;
+            background-color: var(--dark-color);
+            color: white;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+        
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+            margin-top: 56px;
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 0;
+                display: none;
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .sidebar-mobile {
+                display: block !important;
+            }
+        }
+        
+        .sidebar a {
+            color: #bdc3c7;
+            text-decoration: none;
+            display: block;
+            padding: 12px 20px;
+            transition: all 0.3s;
+        }
+        
+        .sidebar a:hover {
+            color: white;
+            background-color: rgba(255,255,255,0.1);
+        }
+        
+        .sidebar a.active {
+            color: white;
+            background-color: var(--secondary-color);
+            border-left: 4px solid var(--warning-color);
+        }
+        
+        .card {
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,.1);
+            border: none;
+            margin-bottom: 20px;
+        }
+        
+        .card-header {
+            background-color: white;
+            border-bottom: 2px solid var(--light-color);
+            font-weight: 600;
+        }
+        
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+        
+        .status-normal {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .status-suspicious {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-theft {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .meter-card {
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        
+        .meter-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 12px rgba(0,0,0,.15);
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+        
+        .stat-card {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .table-hover tbody tr:hover {
+            background-color: rgba(52, 152, 219, 0.1);
+        }
+        
+        .btn-retrain {
+            background-color: var(--warning-color);
+            color: white;
+            border: none;
+        }
+        
+        .btn-retrain:hover {
+            background-color: #e67e22;
+            color: white;
+        }
+        
+        .time-picker {
+            max-width: 200px;
+        }
+        
+        .sidebar-section {
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .sidebar-section-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #95a5a6;
+            margin-bottom: 10px;
+        }
+        
+        .sidebar-submenu {
+            margin-left: 10px;
+        }
+        
+        .sidebar-submenu a {
+            padding: 8px 15px 8px 25px;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-admin navbar-expand-lg navbar-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{% url 'admin_overview' %}">
+                <i class="fas fa-bolt"></i> Electricity Theft Detection - Admin Panel
+            </a>
+            
+           <!-- In your base.html, update the navbar section -->
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text text-light me-3">
+                    <i class="fas fa-user-shield"></i> {{ request.user.username }}
+                </span>
+                <a href="{% url 'admin_logout' %}" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sidebar -->
+    <div class="sidebar d-none d-lg-block">
+        <!-- Dashboard Section -->
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">
+                <i class="fas fa-tachometer-alt me-1"></i> Dashboard
+            </div>
+            <a href="{% url 'admin_overview' %}" 
+               class="{% if request.path == '/admin-panel/overview/' or request.path == '/admin-panel/' %}active{% endif %}">
+                <i class="fas fa-home me-2"></i> Overview
+            </a>
+            <a href="{% url 'admin_analytics' %}" 
+               class="{% if request.path == '/admin-panel/analytics/' %}active{% endif %}">
+                <i class="fas fa-chart-bar me-2"></i> Analytics
+            </a>
+        </div>
+
+        <!-- Anomaly Injection Section -->
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">
+                <i class="fas fa-syringe me-1"></i> Anomaly Injection
+            </div>
+            <a href="{% url 'injection_management' %}" 
+               class="{% if request.path == '/admin-panel/injections/' %}active{% endif %}">
+                <i class="fas fa-list me-2"></i> Injection Management
+            </a>
+            <a href="{% url 'create_injection' %}" 
+               class="{% if request.path == '/admin-panel/injections/create/' %}active{% endif %}">
+                <i class="fas fa-plus-circle me-2"></i> Create Injection
+            </a>
+            <a href="{% url 'injection_report' %}" 
+               class="{% if request.path == '/admin-panel/injections/report/' %}active{% endif %}">
+                <i class="fas fa-chart-pie me-2"></i> Impact Report
+            </a>
+        </div>
+
+        <!-- Feedback Management Section -->
+<div class="sidebar-section">
+    <div class="sidebar-section-title">
+        <i class="fas fa-comments me-1"></i> Feedback Management
+    </div>
+    <a href="{% url 'admin_feedback_management' %}" 
+       class="{% if active_page == 'feedback' %}active{% endif %}">
+        <i class="fas fa-list me-2"></i> All Feedbacks
+    </a>
+    <a href="{% url 'admin_feedback_management' %}?status=pending" 
+       class="sidebar-submenu {% if request.GET.status == 'pending' and active_page == 'feedback' %}active{% endif %}">
+        <i class="fas fa-clock me-2"></i> Pending
+    </a>
+    <a href="{% url 'admin_feedback_management' %}?status=investigation" 
+       class="sidebar-submenu {% if request.GET.status == 'investigation' and active_page == 'feedback' %}active{% endif %}">
+        <i class="fas fa-search me-2"></i> Investigation
+    </a>
+    <a href="{% url 'admin_feedback_management' %}?status=completed" 
+       class="sidebar-submenu {% if request.GET.status == 'completed' and active_page == 'feedback' %}active{% endif %}">
+        <i class="fas fa-check-circle me-2"></i> Completed
+    </a>
+    <a href="{% url 'admin_feedback_analytics' %}" 
+       class="sidebar-submenu">
+        <i class="fas fa-chart-bar me-2"></i> Analytics
+    </a>
+</div>
+        <!-- Adaptive Learning Section -->
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">
+                <i class="fas fa-robot me-1"></i> Adaptive Learning
+            </div>
+            <a href="{% url 'enhanced_retraining' %}" 
+               class="{% if request.path == '/admin-panel/enhanced-retraining/' %}active{% endif %}">
+                <i class="fas fa-cogs me-2"></i> Enhanced Retraining
+            </a>
+            <a href="{% url 'retraining_control' %}" 
+               class="{% if request.path == '/admin-panel/retraining/' %}active{% endif %}">
+                <i class="fas fa-history me-2"></i> Legacy Control
+            </a>
+        </div>
+
+        <!-- Quick Admin Actions -->
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">
+                <i class="fas fa-tools me-1"></i> Quick Actions
+            </div>
+            <a href="{% url 'admin:core_meter_changelist' %}" class="mb-1">
+                <i class="fas fa-tachometer-alt me-2"></i> Manage Meters
+            </a>
+            <a href="{% url 'admin:core_anomalyresult_changelist' %}" class="mb-1">
+                <i class="fas fa-exclamation-triangle me-2"></i> View Anomalies
+            </a>
+                <i class="fas fa-syringe me-2"></i> All Injections
+            </a>
+            <a href="{% url 'admin:core_retraininglog_changelist' %}" class="mb-1">
+                <i class="fas fa-history me-2"></i> Retraining Logs
+            </a>
+            <a href="{% url 'admin:core_modelversion_changelist' %}" class="mb-1">
+                <i class="fas fa-brain me-2"></i> ML Models
+            </a>
+        </div>
+
+        <!-- System Info -->
+        <div class="sidebar-section mt-auto">
+            <div class="sidebar-section-title">
+                <i class="fas fa-info-circle me-1"></i> System Info
+            </div>
+            <small class="text-muted d-block px-3 pb-2">
+                <div class="mb-1">
+                    <i class="fas fa-server me-1"></i> Academic Demo
+                </div>
+                <div class="mb-1">
+                    <i class="fas fa-database me-1"></i> Historical 2012-2014
+                </div>
+                <div>
+                    <i class="fas fa-clock me-1"></i> {% now "F j, Y" %}
+                </div>
+            </small>
+        </div>
+    </div>
+
+    <!-- Mobile Sidebar Toggle -->
+    <div class="sidebar-mobile d-lg-none">
+        <nav class="navbar navbar-light bg-light fixed-bottom">
+            <div class="container-fluid justify-content-center">
+                <a href="{% url 'admin_overview' %}" class="btn btn-outline-primary mx-1" data-bs-toggle="tooltip" title="Overview">
+                    <i class="fas fa-home"></i>
+                </a>
+                <a href="{% url 'injection_management' %}" class="btn btn-outline-danger mx-1" data-bs-toggle="tooltip" title="Injections">
+                    <i class="fas fa-syringe"></i>
+                </a>
+                <a href="{% url 'enhanced_retraining' %}" class="btn btn-outline-warning mx-1" data-bs-toggle="tooltip" title="Retraining">
+                    <i class="fas fa-robot"></i>
+                </a>
+                <a href="{% url 'admin_analytics' %}" class="btn btn-outline-info mx-1" data-bs-toggle="tooltip" title="Analytics">
+                    <i class="fas fa-chart-bar"></i>
+                </a>
+                <button class="btn btn-outline-secondary mx-1" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu" aria-controls="mobileMenu">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Mobile Menu Offcanvas -->
+    <div class="offcanvas offcanvas-bottom" tabindex="-1" id="mobileMenu" aria-labelledby="mobileMenuLabel">
+        <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="mobileMenuLabel">
+                <i class="fas fa-bars me-2"></i> Admin Menu
+            </h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <div class="row">
+                <div class="col-6">
+                    <h6>Dashboard</h6>
+                    <a href="{% url 'admin_overview' %}" class="btn btn-outline-primary w-100 mb-2">
+                        <i class="fas fa-home me-1"></i> Overview
+                    </a>
+                    <a href="{% url 'admin_analytics' %}" class="btn btn-outline-info w-100 mb-2">
+                        <i class="fas fa-chart-bar me-1"></i> Analytics
+                    </a>
+                </div>
+                <div class="col-6">
+                    <h6>Injection</h6>
+                    <a href="{% url 'injection_management' %}" class="btn btn-outline-danger w-100 mb-2">
+                        <i class="fas fa-list me-1"></i> Manage
+                    </a>
+                    <a href="{% url 'create_injection' %}" class="btn btn-outline-success w-100 mb-2">
+                        <i class="fas fa-plus me-1"></i> Create
+                    </a>
+                </div>
+            </div>
+            <hr>
+            <div class="row">
+                <div class="col-6">
+                    <h6>Adaptive Learning</h6>
+                    <a href="{% url 'enhanced_retraining' %}" class="btn btn-outline-warning w-100 mb-2">
+                        <i class="fas fa-robot me-1"></i> Enhanced
+                    </a>
+                    <a href="{% url 'retraining_control' %}" class="btn btn-outline-secondary w-100 mb-2">
+                        <i class="fas fa-history me-1"></i> Legacy
+                    </a>
+                </div>
+                <div class="col-6">
+                    <h6>Quick Access</h6>
+                    <a href="{% url 'admin:index' %}" class="btn btn-outline-dark w-100 mb-2">
+                        <i class="fas fa-cog me-1"></i> Django Admin
+                    </a>
+                    <a href="{% url 'injection_report' %}" class="btn btn-outline-info w-100 mb-2">
+                        <i class="fas fa-chart-pie me-1"></i> Reports
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        {% if messages %}
+        <div class="container-fluid">
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {% if message.tags == 'success' %}
+                <i class="fas fa-check-circle me-2"></i>
+                {% elif message.tags == 'warning' %}
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                {% elif message.tags == 'error' or message.tags == 'danger' %}
+                <i class="fas fa-exclamation-circle me-2"></i>
+                {% else %}
+                <i class="fas fa-info-circle me-2"></i>
+                {% endif %}
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% block content %}
+        {% endblock %}
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script>
+        // Auto-refresh data every 60 seconds (only on overview/analytics pages)
+        if (window.location.pathname.includes('/admin-panel/overview/') || 
+            window.location.pathname.includes('/admin-panel/analytics/')) {
+            setTimeout(function() {
+                window.location.reload();
+            }, 60000);
+        }
+        
+        // Tooltip initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+            
+            // Auto-dismiss alerts after 5 seconds
+            setTimeout(function() {
+                var alerts = document.querySelectorAll('.alert');
+                alerts.forEach(function(alert) {
+                    var bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                });
+            }, 5000);
+        });
+        
+        // Get CSRF token for AJAX requests
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        
+        // Global refresh function
+        function refreshPage() {
+            window.location.reload();
+        }
+        
+        // Global export function
+        function exportData(format, endpoint, filename) {
+            const params = new URLSearchParams(window.location.search);
+            params.append('format', format);
+            
+            fetch(`${endpoint}?${params.toString()}`)
+                .then(response => response.blob())
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename || `export_${format}_${new Date().toISOString().split('T')[0]}.${format}`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                })
+                .catch(error => {
+                    console.error('Export error:', error);
+                    alert('Error exporting data. Please try again.');
+                });
+        }
+    </script>
+    
+    {% block scripts %}
+    {% endblock %}
+</body>
+</html>

@@ -1,0 +1,817 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block title %}System Analytics - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-chart-bar text-primary"></i>
+            System Analytics
+            <span class="badge bg-secondary ms-2">Data up to {{ filter_date }}</span>
+        </h2>
+        <div class="d-flex">
+            <!-- Date Filter -->
+            <div class="input-group me-3 time-picker">
+                <span class="input-group-text">
+                    <i class="fas fa-calendar-alt"></i>
+                </span>
+                <input type="date" class="form-control" id="dateFilter" 
+                       value="{{ filter_date|date:'Y-m-d' }}"
+                       min="{{ min_date|date:'Y-m-d' }}" 
+                       max="{{ max_date|date:'Y-m-d' }}">
+                <button class="btn btn-primary" onclick="filterByDate()">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+            </div>
+            
+            <div class="btn-group me-3" role="group">
+                <button type="button" class="btn btn-outline-primary active" onclick="showTab('overview')">Overview</button>
+                <button type="button" class="btn btn-outline-primary" onclick="showTab('anomalies')">Anomalies</button>
+                <button type="button" class="btn btn-outline-primary" onclick="showTab('models')">Models</button>
+            </div>
+            <button class="btn btn-success" onclick="refreshData()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Date Range Info -->
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-info-circle me-2"></i>
+        Showing analytics data up to <strong>{{ filter_date }}</strong>. 
+        Date range available: {{ min_date }} to {{ max_date }}
+    </div>
+
+    <!-- Overview Tab (Default) -->
+    <div id="overviewTab" class="tab-content">
+        <!-- System Stats -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card bg-light">
+                    <div class="card-body">
+                        <div class="stat-value text-primary">{{ total_meters }}</div>
+                        <div class="stat-label">Total Meters</div>
+                        <small class="text-muted">{{ active_meters }} active</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-light">
+                    <div class="card-body">
+                        <div class="stat-value text-success">{{ detection_rate_30d|default:"0.0" }}%</div>
+                        <div class="stat-label">Detection Rate</div>
+                        <small class="text-muted">Last 30 days</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-light">
+                    <div class="card-body">
+                        <div class="stat-value text-warning">{{ stats_30d.suspicious|default:0 }}</div>
+                        <div class="stat-label">Suspicious Cases</div>
+                        <small class="text-muted">Last 30 days</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-light">
+                    <div class="card-body">
+                        <div class="stat-value text-danger">{{ stats_30d.theft|default:0 }}</div>
+                        <div class="stat-label">Theft Detections</div>
+                        <small class="text-muted">Last 30 days</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Daily Anomaly Trend -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-line me-2"></i>
+                    Daily Anomaly Trend (Last 30 Days)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="dailyTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model Coverage -->
+        <div class="row mb-4">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-code-branch me-2"></i>
+                            Model Coverage
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 250px;">
+                            <canvas id="modelCoverageChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-cogs me-2"></i>
+                            Model Status
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <small class="text-muted">Model Coverage</small>
+                            <div class="progress" style="height: 20px;">
+                                {% with coverage_percentage=model_stats.active_models|floatformat:0 %}
+                                <div class="progress-bar bg-success" 
+                                     style="width: {% widthratio model_stats.active_models total_meters 100 %}%">
+                                    {% widthratio model_stats.active_models total_meters 100 %}%
+                                </div>
+                                {% endwith %}
+                            </div>
+                            <small class="text-muted">
+                                {{ model_stats.active_models }} of {{ total_meters }} meters
+                            </small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <small class="text-muted">Average Model Age</small>
+                            <div class="d-flex justify-content-between">
+                                <span>{{ model_stats.avg_training_samples|floatformat:0 }} samples</span>
+                                <span>{{ model_stats.models_retrained_recently }} recent</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Meters with Most Anomalies -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Top Meters with Most Anomalies (Last 30 Days)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Meter ID</th>
+                                <th>Anomalies</th>
+                                <th>Suspicious</th>
+                                <th>Theft</th>
+                                <th>Latest Date</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for meter in top_anomaly_meters %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'meter_detail' meter.meter_id %}">
+                                        {{ meter.meter_id }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger">{{ meter.anomaly_count }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-warning">
+                                        {{ meter.suspicious_count|default:0 }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger">
+                                        {{ meter.theft_count|default:0 }}
+                                    </span>
+                                </td>
+                                <td>{{ meter.latest_anomaly_date|date:"Y-m-d"|default:"N/A" }}</td>
+                                <td>
+                                    {% if meter.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    No anomaly data available for the last 30 days
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Anomalies Tab -->
+    <div id="anomaliesTab" class="tab-content" style="display: none;">
+        <div class="row mb-4">
+            <!-- Time Period Comparison -->
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-area me-2"></i>
+                            Anomaly Statistics by Time Period
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-container" style="height: 300px;">
+                            <canvas id="periodComparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-percentage me-2"></i>
+                            Detection Performance
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6 mb-3">
+                                <div class="stat-value text-primary">
+                                    {{ stats_7d.avg_confidence|default:0|floatformat:2 }}
+                                </div>
+                                <div class="stat-label">7-Day Confidence</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="stat-value text-success">
+                                    {{ stats_30d.avg_confidence|default:0|floatformat:2 }}
+                                </div>
+                                <div class="stat-label">30-Day Confidence</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="stat-value text-warning">
+                                    {{ stats_90d.avg_confidence|default:0|floatformat:2 }}
+                                </div>
+                                <div class="stat-label">90-Day Confidence</div>
+                            </div>
+                            <div class="col-6 mb-3">
+                                <div class="stat-value text-danger">
+                                    {{ stats_90d.avg_score|default:0|floatformat:3 }}
+                                </div>
+                                <div class="stat-label">Avg Anomaly Score</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Statistics -->
+        <div class="row">
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-calendar-week me-2"></i>
+                            Last 7 Days
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <td>Total Anomalies:</td>
+                                <td class="text-end">{{ stats_7d.total|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Normal:</td>
+                                <td class="text-end text-success">{{ stats_7d.normal|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Suspicious:</td>
+                                <td class="text-end text-warning">{{ stats_7d.suspicious|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Theft:</td>
+                                <td class="text-end text-danger">{{ stats_7d.theft|default:0 }}</td>
+                            </tr>
+                            <tr class="table-light">
+                                <td>Detection Rate:</td>
+                                <td class="text-end fw-bold">
+                                    {{ stats_7d.detection_rate }}%
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-calendar-alt me-2"></i>
+                            Last 30 Days
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <td>Total Anomalies:</td>
+                                <td class="text-end">{{ stats_30d.total|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Normal:</td>
+                                <td class="text-end text-success">{{ stats_30d.normal|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Suspicious:</td>
+                                <td class="text-end text-warning">{{ stats_30d.suspicious|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Theft:</td>
+                                <td class="text-end text-danger">{{ stats_30d.theft|default:0 }}</td>
+                            </tr>
+                            <tr class="table-light">
+                                <td>Detection Rate:</td>
+                                <td class="text-end fw-bold">
+                                    {{ stats_30d.detection_rate }}%
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-line me-2"></i>
+                            Last 90 Days
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <td>Total Anomalies:</td>
+                                <td class="text-end">{{ stats_90d.total|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Normal:</td>
+                                <td class="text-end text-success">{{ stats_90d.normal|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Suspicious:</td>
+                                <td class="text-end text-warning">{{ stats_90d.suspicious|default:0 }}</td>
+                            </tr>
+                            <tr>
+                                <td>Theft:</td>
+                                <td class="text-end text-danger">{{ stats_90d.theft|default:0 }}</td>
+                            </tr>
+                            <tr class="table-light">
+                                <td>Detection Rate:</td>
+                                <td class="text-end fw-bold">
+                                    {{ stats_90d.detection_rate }}%
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Models Tab -->
+    <div id="modelsTab" class="tab-content" style="display: none;">
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card stat-card bg-light">
+                    <div class="card-body">
+                        <div class="stat-value text-primary">{{ model_stats.total_models }}</div>
+                        <div class="stat-label">Total Models</div>
+                        <small class="text-muted">{{ model_stats.active_models }} active</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-light">
+                    <div class="card-body">
+                        <div class="stat-value text-success">{{ model_stats.avg_training_samples|floatformat:0 }}</div>
+                        <div class="stat-label">Avg Training Samples</div>
+                        <small class="text-muted">Per model</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-light">
+                    <div class="card-body">
+                        <div class="stat-value text-warning">{{ model_stats.models_retrained_recently }}</div>
+                        <div class="stat-label">Recently Retrained</div>
+                        <small class="text-muted">Last 30 days</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card stat-card bg-light">
+                    <div class="card-body">
+                        <div class="stat-value text-danger">{{ meters_without_models }}</div>
+                        <div class="stat-label">Without Models</div>
+                        <small class="text-muted">Need attention</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model Performance Overview -->
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-pie me-2"></i>
+                            Model Distribution & Performance
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-lg-4">
+                                <div class="card bg-light">
+                                    <div class="card-body text-center">
+                                        <div class="display-4 text-primary">
+                                            {% widthratio model_stats.active_models total_meters 100 %}%
+                                        </div>
+                                        <div class="text-muted">Model Coverage</div>
+                                        <small>{{ model_stats.active_models }} of {{ total_meters }} meters</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-8">
+                                <div class="chart-container" style="height: 250px;">
+                                    <canvas id="modelDistributionChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Retraining Information -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="fas fa-history me-2"></i>
+                    Model Performance Metrics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Model performance metrics based on data up to {{ filter_date }}
+                </div>
+                
+                <div class="row text-center">
+                    <div class="col-md-3 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="stat-value text-primary">
+                                    {{ detection_rate_30d|default:"0.0" }}%
+                                </div>
+                                <div class="stat-label">30-Day Detection Rate</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="stat-value text-success">
+                                    {{ stats_30d.avg_confidence|default:0|floatformat:2 }}
+                                </div>
+                                <div class="stat-label">Avg Confidence</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="stat-value text-warning">
+                                    {{ stats_30d.avg_score|default:0|floatformat:3 }}
+                                </div>
+                                <div class="stat-label">Avg Anomaly Score</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="stat-value text-danger">
+                                    {{ stats_30d.theft|default:0 }}
+                                </div>
+                                <div class="stat-label">Theft Detections</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Parse data from Django template
+const dailyTrendData = {{ daily_trend|safe }};
+
+function showTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.style.display = 'none';
+    });
+    
+    // Remove active class from all buttons
+    document.querySelectorAll('.btn-group .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    // Show selected tab and activate button
+    document.getElementById(tabName + 'Tab').style.display = 'block';
+    event.target.classList.add('active');
+}
+
+function refreshData() {
+    window.location.reload();
+}
+
+function filterByDate() {
+    const date = document.getElementById('dateFilter').value;
+    window.location.href = `?date=${date}`;
+}
+
+// Initialize charts when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Daily Trend Chart
+    if (dailyTrendData && dailyTrendData.length > 0) {
+        const trendCtx = document.getElementById('dailyTrendChart').getContext('2d');
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: dailyTrendData.map(d => d.date.substring(5)), // Show only month-day
+                datasets: [
+                    {
+                        label: 'Normal',
+                        data: dailyTrendData.map(d => d.normal),
+                        borderColor: '#27ae60',
+                        backgroundColor: 'rgba(39, 174, 96, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Suspicious',
+                        data: dailyTrendData.map(d => d.suspicious),
+                        borderColor: '#f39c12',
+                        backgroundColor: 'rgba(243, 156, 18, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Theft',
+                        data: dailyTrendData.map(d => d.theft),
+                        borderColor: '#e74c3c',
+                        backgroundColor: 'rgba(231, 76, 60, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Cases'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                }
+            }
+        });
+    } else {
+        // If no data, show message
+        document.getElementById('dailyTrendChart').parentElement.innerHTML = 
+            '<div class="alert alert-warning text-center">No trend data available for the last 30 days.</div>';
+    }
+
+    // Model Coverage Chart
+    const coverageCtx = document.getElementById('modelCoverageChart').getContext('2d');
+    new Chart(coverageCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['With Models', 'Without Models'],
+            datasets: [{
+                data: [
+                    {{ model_stats.active_models }},
+                    {{ meters_without_models }}
+                ],
+                backgroundColor: ['#27ae60', '#e74c3c'],
+                borderWidth: 2,
+                borderColor: '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = {{ total_meters }};
+                            const percentage = Math.round((context.raw / total) * 100);
+                            return `${context.label}: ${context.raw} (${percentage}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Period Comparison Chart
+    const periodCtx = document.getElementById('periodComparisonChart').getContext('2d');
+    new Chart(periodCtx, {
+        type: 'bar',
+        data: {
+            labels: ['7 Days', '30 Days', '90 Days'],
+            datasets: [
+                {
+                    label: 'Normal',
+                    data: [
+                        {{ stats_7d.normal|default:0 }},
+                        {{ stats_30d.normal|default:0 }},
+                        {{ stats_90d.normal|default:0 }}
+                    ],
+                    backgroundColor: '#27ae60'
+                },
+                {
+                    label: 'Suspicious',
+                    data: [
+                        {{ stats_7d.suspicious|default:0 }},
+                        {{ stats_30d.suspicious|default:0 }},
+                        {{ stats_90d.suspicious|default:0 }}
+                    ],
+                    backgroundColor: '#f39c12'
+                },
+                {
+                    label: 'Theft',
+                    data: [
+                        {{ stats_7d.theft|default:0 }},
+                        {{ stats_30d.theft|default:0 }},
+                        {{ stats_90d.theft|default:0 }}
+                    ],
+                    backgroundColor: '#e74c3c'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    stacked: true,
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Cases'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top'
+                }
+            }
+        }
+    });
+
+    // Model Distribution Chart
+    const distributionCtx = document.getElementById('modelDistributionChart').getContext('2d');
+    new Chart(distributionCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Total Models', 'Active Models', 'Recent Retraining', 'Need Retraining'],
+            datasets: [{
+                label: 'Count',
+                data: [
+                    {{ model_stats.total_models }},
+                    {{ model_stats.active_models }},
+                    {{ model_stats.models_retrained_recently }},
+                    {{ meters_without_models }}
+                ],
+                backgroundColor: [
+                    '#3498db',
+                    '#27ae60',
+                    '#f39c12',
+                    '#e74c3c'
+                ],
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Count'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+});
+</script>
+
+<style>
+.tab-content {
+    display: block;
+}
+.stat-card {
+    border: none;
+    border-radius: 10px;
+}
+.stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+}
+.stat-label {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 0.25rem;
+}
+.chart-container {
+    position: relative;
+}
+.card {
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    margin-bottom: 1rem;
+}
+.table th {
+    border-top: none;
+    font-weight: 600;
+    color: #495057;
+}
+.btn-group .btn {
+    border-radius: 5px;
+}
+.btn-group .btn.active {
+    background-color: #007bff;
+    color: white;
+}
+.alert {
+    border-radius: 8px;
+}
+.progress {
+    border-radius: 10px;
+}
+.progress-bar {
+    border-radius: 10px;
+}
+.time-picker {
+    width: 300px;
+}
+</style>
+{% endblock %}

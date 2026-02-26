@@ -1,0 +1,191 @@
+{% extends 'admin_panel/base.html' %}
+{% load static %}
+
+{% block title %}Feedback #{{ feedback.id }} - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="h3 mb-0">
+                <i class="fas fa-comment-dots me-2 text-primary"></i>Feedback Details
+            </h2>
+            <p class="text-muted mb-0">Feedback ID: #{{ feedback.id }}</p>
+        </div>
+        <div class="btn-group">
+            <a href="{% url 'admin_feedback_management' %}" class="btn btn-outline-primary">
+                <i class="fas fa-arrow-left me-1"></i>Back to List
+            </a>
+        </div>
+    </div>
+    
+    <!-- Messages -->
+    {% if messages %}
+    <div class="mb-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            <i class="fas fa-{% if message.tags == 'success' %}check-circle{% else %}exclamation-triangle{% endif %} me-2"></i>
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <!-- Left Column: Feedback Details -->
+        <div class="col-lg-8">
+            <!-- Feedback Information Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Feedback Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>User:</strong> {{ feedback.user.username }}</p>
+                            <p><strong>Email:</strong> {{ feedback.user.email|default:"Not provided" }}</p>
+                            <p><strong>ID/Meter Number:</strong> {{ feedback.id_number }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Type:</strong> {{ feedback.get_feedback_type_display }}</p>
+                            <p><strong>Status:</strong> 
+                                <span class="badge bg-{{ feedback.get_status_badge }}">
+                                    {{ feedback.get_status_display }}
+                                </span>
+                            </p>
+                            <p><strong>Submitted:</strong> {{ feedback.created_at|date:"M d, Y H:i" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Feedback Message Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Feedback Message</h5>
+                </div>
+                <div class="card-body">
+                    <div class="bg-light p-3 rounded">
+                        {{ feedback.feedback_text|linebreaks }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Admin Response Form -->
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Admin Response</h5>
+                </div>
+                <div class="card-body">
+                    {% if feedback.admin_response %}
+                    <div class="mb-4">
+                        <h6>Current Response:</h6>
+                        <div class="bg-success text-white p-3 rounded">
+                            {{ feedback.admin_response|linebreaks }}
+                            <small class="d-block mt-2">
+                                <i class="fas fa-clock me-1"></i>
+                                Last updated: {{ feedback.updated_at|date:"M d, Y H:i" }}
+                            </small>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="status" class="form-label">Update Status</label>
+                            <select class="form-select" name="status" id="status">
+                                <option value="pending" {% if feedback.status == 'pending' %}selected{% endif %}>Pending</option>
+                                <option value="investigation" {% if feedback.status == 'investigation' %}selected{% endif %}>Under Investigation</option>
+                                <option value="completed" {% if feedback.status == 'completed' %}selected{% endif %}>Completed</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="admin_response" class="form-label">Admin Response</label>
+                            <textarea class="form-control" id="admin_response" name="admin_response" rows="5" 
+                                      placeholder="Enter your response to the user...">{% if feedback.admin_response %}{{ feedback.admin_response }}{% endif %}</textarea>
+                            <div class="form-text">Your response will be visible to the user.</div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'admin_feedback_management' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times me-1"></i>Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Column: Quick Actions & User Info -->
+        <div class="col-lg-4">
+            <!-- Quick Status Update -->
+            <div class="card mb-4">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Quick Status Update</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'admin_mark_pending' feedback.id %}" 
+                           class="btn btn-outline-warning {% if feedback.status == 'pending' %}active{% endif %}"
+                           onclick="return confirm('Mark as Pending?')">
+                            <i class="fas fa-clock me-1"></i>Mark as Pending
+                        </a>
+                        
+                        <a href="{% url 'admin_mark_investigation' feedback.id %}" 
+                           class="btn btn-outline-info {% if feedback.status == 'investigation' %}active{% endif %}"
+                           onclick="return confirm('Mark as Under Investigation?')">
+                            <i class="fas fa-search me-1"></i>Mark as Investigation
+                        </a>
+                        
+                        <a href="{% url 'admin_mark_completed' feedback.id %}" 
+                           class="btn btn-outline-success {% if feedback.status == 'completed' %}active{% endif %}"
+                           onclick="return confirm('Mark as Completed?')">
+                            <i class="fas fa-check-circle me-1"></i>Mark as Completed
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- User's Other Feedbacks -->
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">User's Other Feedbacks</h5>
+                </div>
+                <div class="card-body">
+                    {% if user_feedbacks %}
+                    <div class="list-group">
+                        {% for fb in user_feedbacks %}
+                        <a href="{% url 'admin_feedback_detail' fb.id %}" 
+                           class="list-group-item list-group-item-action">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>#{{ fb.id }}</strong>
+                                    <small class="text-muted ms-2">{{ fb.id_number }}</small>
+                                </div>
+                                <span class="badge bg-{{ fb.get_status_badge }}">
+                                    {{ fb.get_status_display }}
+                                </span>
+                            </div>
+                            <small class="text-muted d-block mt-1">
+                                {{ fb.created_at|date:"M d, Y" }}
+                            </small>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No other feedbacks from this user.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

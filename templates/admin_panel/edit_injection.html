@@ -1,0 +1,390 @@
+{% extends 'admin_panel/base.html' %}
+
+{% block title %}Edit Anomaly Injection - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-edit text-primary"></i>
+            Edit Anomaly Injection
+        </h2>
+        <div>
+            <a href="{% url 'injection_management' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Management
+            </a>
+        </div>
+    </div>
+
+    <!-- Injection Info Card -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">
+                <i class="fas fa-info-circle"></i> Injection Details
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Meter ID:</strong><br>
+                    <span class="badge bg-primary">{{ injection.meter.meter_id }}</span>
+                </div>
+                <div class="col-md-3">
+                    <strong>Date:</strong><br>
+                    <span class="badge bg-info">{{ injection.date }}</span>
+                </div>
+                <div class="col-md-3">
+                    <strong>Created:</strong><br>
+                    <small>{{ injection.created_at|date:"Y-m-d H:i" }}</small>
+                </div>
+                <div class="col-md-3">
+                    <strong>Created By:</strong><br>
+                    <small>{{ injection.created_by.username|default:"System" }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Form -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-edit"></i> Edit Injection Parameters
+            </h5>
+        </div>
+        <div class="card-body">
+            <form method="post" id="editInjectionForm">
+                {% csrf_token %}
+                
+                <!-- Injection Type -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Injection Type</label>
+                        <select class="form-select" name="injection_type" id="injectionType" required>
+                            {% for choice in injection_type_choices %}
+                            <option value="{{ choice.0 }}" 
+                                    {% if injection.injection_type == choice.0 %}selected{% endif %}>
+                                {{ choice.1 }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            This will override ML predictions for the specified time period
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Time Slot</label>
+                        <select class="form-select" name="time_slot" id="timeSlot">
+                            {% for choice in time_slot_choices %}
+                            <option value="{{ choice.0 }}" 
+                                    {% if injection.time_slot == choice.0 %}selected{% endif %}>
+                                {{ choice.1 }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Choose specific 30-minute slot or "Full Day"
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Score and Confidence -->
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Anomaly Score</label>
+                        <input type="number" step="0.001" class="form-control" 
+                               name="injected_score" id="injectedScore"
+                               value="{{ injection.injected_score|floatformat:3 }}" required>
+                        <div class="form-text">
+                            Typical values: Normal >0.1, Suspicious ≈0.0, Theft < -0.1
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Confidence</label>
+                        <input type="number" step="0.01" min="0" max="1" class="form-control"
+                               name="injected_confidence" id="injectedConfidence"
+                               value="{{ injection.injected_confidence|floatformat:2 }}" required>
+                        <div class="form-text">
+                            Confidence level (0-1)
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Status</label>
+                        <select class="form-select" name="is_active" id="isActive">
+                            <option value="true" {% if injection.is_active %}selected{% endif %}>Active</option>
+                            <option value="false" {% if not injection.is_active %}selected{% endif %}>Inactive</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Consumption Override -->
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-sliders-h"></i> Consumption Override (Optional)
+                        </label>
+                        <textarea class="form-control" name="consumption_override" 
+                                  id="consumptionOverride" rows="3" 
+                                  placeholder='Example: {"value": 2.5} or {"multiplier": 0.5}'>
+{% if injection.consumption_override %}{{ injection.consumption_override|safe }}{% endif %}</textarea>
+                        <div class="form-text">
+                            Override consumption for the time slot. JSON format.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expiration Date -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Expiration Date (Optional)</label>
+                        <input type="date" class="form-control" name="expires_at"
+                               id="expiresAt" 
+                               value="{% if injection.expires_at %}{{ injection.expires_at|date:'Y-m-d' }}{% endif %}">
+                        <div class="form-text">
+                            Injection will auto-deactivate after this date
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Reason</label>
+                        <textarea class="form-control" name="reason" id="reason" 
+                                  rows="2" placeholder="Explain why this injection was created..."
+                                  >{{ injection.reason }}</textarea>
+                    </div>
+                </div>
+
+                <!-- Preview and Validation -->
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6><i class="fas fa-eye"></i> Preview Changes</h6>
+                                <div id="previewSection">
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-sync fa-spin"></i>
+                                        Loading preview...
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-info mt-2" 
+                                        onclick="updatePreview()">
+                                    <i class="fas fa-redo"></i> Refresh Preview
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-danger" 
+                                    onclick="confirmDelete()">
+                                <i class="fas fa-trash"></i> Delete Injection
+                            </button>
+                            <div>
+                                <a href="{% url 'injection_management' %}" class="btn btn-secondary me-2">
+                                    <i class="fas fa-times"></i> Cancel
+                                </a>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Impact Warning -->
+    <div class="card mt-4 border-warning">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0">
+                <i class="fas fa-exclamation-triangle"></i> Important Notes
+            </h5>
+        </div>
+        <div class="card-body">
+            <ul class="mb-0">
+                <li>Editing an injection will immediately affect anomaly detection results</li>
+                <li>Existing ML predictions for this meter/date will be overridden</li>
+                <li>Set an expiration date for temporary injections (e.g., during maintenance)</li>
+                <li>Use "Inactive" status to disable without deleting</li>
+                <li>Changes are logged in the Django admin audit trail</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle"></i> Confirm Deletion
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this injection?</p>
+                <div class="alert alert-warning">
+                    <strong>Warning:</strong> This action cannot be undone. 
+                    All injection overrides for this meter and date will be removed.
+                </div>
+                <p><strong>Meter:</strong> {{ injection.meter.meter_id }}</p>
+                <p><strong>Date:</strong> {{ injection.date }}</p>
+                <p><strong>Type:</strong> {{ injection.get_injection_type_display }}</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <form method="post" action="{% url 'delete_injection' injection.id %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Delete Permanently
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Initialize preview on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updatePreview();
+    
+    // Auto-update preview when form fields change
+    document.getElementById('injectionType').addEventListener('change', updatePreview);
+    document.getElementById('injectedScore').addEventListener('input', updatePreview);
+    document.getElementById('injectedConfidence').addEventListener('input', updatePreview);
+    document.getElementById('timeSlot').addEventListener('change', updatePreview);
+    document.getElementById('isActive').addEventListener('change', updatePreview);
+});
+
+function updatePreview() {
+    const type = document.getElementById('injectionType').value;
+    const score = document.getElementById('injectedScore').value;
+    const confidence = document.getElementById('injectedConfidence').value;
+    const timeSlot = document.getElementById('timeSlot').value;
+    const isActive = document.getElementById('isActive').value === 'true';
+    const reason = document.getElementById('reason').value;
+    
+    // Get time slot display text
+    const timeSlotDisplay = document.querySelector(`#timeSlot option[value="${timeSlot}"]`).textContent;
+    
+    // Set badge color based on type
+    let badgeClass, badgeText;
+    if (type === 'normal') {
+        badgeClass = 'success';
+        badgeText = 'Normal';
+    } else if (type === 'suspicious') {
+        badgeClass = 'warning';
+        badgeText = 'Suspicious';
+    } else {
+        badgeClass = 'danger';
+        badgeText = 'Theft';
+    }
+    
+    // Status badge
+    const statusBadge = isActive ? 
+        '<span class="badge bg-success">Active</span>' : 
+        '<span class="badge bg-secondary">Inactive</span>';
+    
+    const previewHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>Type:</strong></td>
+                        <td><span class="badge bg-${badgeClass}">${badgeText}</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Score:</strong></td>
+                        <td>${parseFloat(score).toFixed(3)}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Confidence:</strong></td>
+                        <td>${parseFloat(confidence).toFixed(2)}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>Time Slot:</strong></td>
+                        <td>${timeSlotDisplay}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Status:</strong></td>
+                        <td>${statusBadge}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Reason:</strong></td>
+                        <td>${reason || '<em>No reason provided</em>'}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        <div class="alert alert-info mt-2">
+            <i class="fas fa-info-circle"></i>
+            This injection will override ML predictions for 
+            <strong>{{ injection.meter.meter_id }}</strong> on 
+            <strong>{{ injection.date }}</strong> during 
+            <strong>${timeSlotDisplay}</strong>.
+        </div>
+    `;
+    
+    document.getElementById('previewSection').innerHTML = previewHTML;
+}
+
+function confirmDelete() {
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+}
+
+// Auto-set typical scores based on injection type
+document.getElementById('injectionType').addEventListener('change', function() {
+    const scoreInput = document.getElementById('injectedScore');
+    const confidenceInput = document.getElementById('injectedConfidence');
+    
+    switch(this.value) {
+        case 'normal':
+            scoreInput.value = '0.15';
+            confidenceInput.value = '0.95';
+            break;
+        case 'suspicious':
+            scoreInput.value = '0.0';
+            confidenceInput.value = '0.85';
+            break;
+        case 'theft':
+            scoreInput.value = '-0.2';
+            confidenceInput.value = '0.90';
+            break;
+    }
+    
+    updatePreview();
+});
+
+// Validate JSON in consumption override
+document.getElementById('editInjectionForm').addEventListener('submit', function(e) {
+    const overrideField = document.getElementById('consumptionOverride');
+    const overrideValue = overrideField.value.trim();
+    
+    if (overrideValue) {
+        try {
+            JSON.parse(overrideValue);
+        } catch (error) {
+            e.preventDefault();
+            alert('Invalid JSON in consumption override field. Please fix or remove the content.');
+            overrideField.focus();
+            return false;
+        }
+    }
+    
+    return true;
+});
+</script>
+{% endblock %}
