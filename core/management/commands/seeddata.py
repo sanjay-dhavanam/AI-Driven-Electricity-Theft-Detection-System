@@ -2,7 +2,9 @@ from django.core.management.base import BaseCommand
 from core.models import Meter, DailyConsumption
 from django.utils import timezone
 from datetime import timedelta
+from django.contrib.auth import get_user_model
 import random
+
 
 class Command(BaseCommand):
     def handle(self, *args, **kwargs):
@@ -18,3 +20,16 @@ class Command(BaseCommand):
                 )
 
         self.stdout.write("Demo data created")
+
+
+
+
+User = get_user_model()
+
+if not User.objects.filter(username="admin").exists():
+    User.objects.create_superuser(
+        username="admin",
+        email="admin@gmail.com",
+        password="admin123"
+    )
+    print("Superuser created")
