@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-# import dj_database_url
+import dj_database_url
 
 # --------------------------------------------------
 # Base Directory
@@ -10,14 +10,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --------------------------------------------------
 # Security
 # --------------------------------------------------
-SECRET_KEY = os.environ.get(
-    "SECRET_KEY",
-    "django-insecure-change-this-in-production"
-)
 
-DEBUG = os.environ.get("DEBUG", "False") == "True"
+SECRET_KEY = os.environ.get("SECRET_KEY", "unsafe-secret")
+DEBUG = False
 
-ALLOWED_HOSTS = ['*']  # You can restrict after deployment
+ALLOWED_HOSTS = ["*"]  # You can restrict after deployment
 
 # --------------------------------------------------
 # Installed Apps
@@ -84,12 +81,10 @@ TEMPLATES = [
 #         "NAME": BASE_DIR / "db.sqlite3",
 #     }
 # }
-
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
+    'default': dj_database_url.config(
+        default='sqlite:///db.sqlite3'
+    )
 }
 
 # DATABASES = {
